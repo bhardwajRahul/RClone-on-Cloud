@@ -1,4 +1,4 @@
-package mongoconfig
+package mongodb_test
 
 import (
 	"context"

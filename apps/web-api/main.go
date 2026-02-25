@@ -18,7 +18,7 @@ import (
 	_ "github.com/rclone/rclone/fs/operations"
 	_ "github.com/rclone/rclone/fs/sync"
 
-	_ "github.com/ekarton/RClone-Cloud/apps/web-api/config/mongodb"
+	"github.com/ekarton/RClone-Cloud/apps/web-api/config/mongodb"
 )
 
 func main() {
@@ -46,7 +46,7 @@ func main() {
 	collection := client.Database("rclone").Collection("configs")
 
 	// 3. Create storage and load existing config into memory
-	store, err := mongoconfig.NewMongoStorage(collection, encKey)
+	store, err := mongodb.New(collection, encKey)
 	if err != nil {
 		log.Fatalf("init storage: %v", err)
 	}

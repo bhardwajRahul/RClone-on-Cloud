@@ -1,4 +1,4 @@
-module github.com/ekarton/rclone-web-service
+module github.com/ekarton/RClone-Cloud/apps/web-api
 
 go 1.25.0
 
