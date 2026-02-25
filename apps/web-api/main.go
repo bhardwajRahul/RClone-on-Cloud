@@ -14,11 +14,11 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	_ "github.com/rclone/rclone/backend/all" // all 50+ backends
+	"github.com/ekarton/RClone-Cloud/apps/web-api/config/mongodb"
+
+	_ "github.com/rclone/rclone/backend/all"
 	_ "github.com/rclone/rclone/fs/operations"
 	_ "github.com/rclone/rclone/fs/sync"
-
-	"github.com/ekarton/RClone-Cloud/apps/web-api/config/mongodb"
 )
 
 func main() {

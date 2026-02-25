@@ -3,160 +3,246 @@ package mongodb_test
 import (
 	"context"
 	"testing"
-	"time"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	tcmongo "github.com/testcontainers/testcontainers-go/modules/mongodb"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/ekarton/RClone-Cloud/apps/web-api/config/mongodb"
 )
 
-func setupTestDB(t *testing.T) (*MongoStorage, func()) {
-	t.Helper()
+// testKey is a fixed 32-byte AES-256 key for tests only.
+var testKey = []byte("00000000000000000000000000000000")
 
-	// Use generic mongo test container or simple local Mongo if available.
-	// We'll assume a local default mongo is running for these tests.
-	// In CI, you'd want to use testcontainers-go.
-	uri := "mongodb://localhost:27017"
-	dbName := "rclone_test_db"
-	colName := "rclone_configs"
+// Setup spins up a real MongoDB container and returns a MongoStorage + cleanup func.
+// Each test gets a fresh isolated database so tests never interfere with each other.
+func setup(t *testing.T) (*mongodb.MongoStorage, func()) {
+	t.Helper()
 	ctx := context.Background()
 
-	// Clear out DB first
-	clientOpts := options.Client().ApplyURI(uri)
-	client, err := mongo.Connect(clientOpts)
-	if err != nil {
-		t.Skipf("MongoDB not running on localhost:27017, skipping tests: %v", err)
-	}
-	_ = client.Database(dbName).Collection(colName).Drop(ctx)
-	_ = client.Disconnect(ctx)
+	// Start a real MongoDB container (pulled from Docker Hub)
+	container, err := tcmongo.Run(ctx, "mongo:7")
+	require.NoError(t, err, "failed to start MongoDB container")
 
-	// 32-byte key for AES-256
-	key := []byte("12345678901234567890123456789012")
-	storage, err := NewMongoStorage(ctx, uri, dbName, colName, key)
-	if err != nil {
-		t.Fatalf("Failed to create storage: %v", err)
-	}
+	uri, err := container.ConnectionString(ctx)
+	require.NoError(t, err)
+
+	client, err := mongo.Connect(options.Client().ApplyURI(uri))
+	require.NoError(t, err)
+
+	// Use t.Name() as the DB name so each test is fully isolated
+	collection := client.Database(t.Name()).Collection("configs")
+
+	store, err := mongodb.New(collection, testKey)
+	require.NoError(t, err)
 
 	cleanup := func() {
-		_ = storage.collection.Drop(ctx)
-		_ = storage.Close()
+		_ = client.Disconnect(ctx)
+		_ = container.Terminate(ctx)
 	}
-
-	return storage, cleanup
+	return store, cleanup
 }
 
-func TestMongoStorage_BasicOps(t *testing.T) {
-	storage, cleanup := setupTestDB(t)
+func TestLoad_EmptyDB(t *testing.T) {
+	store, cleanup := setup(t)
 	defer cleanup()
 
-	// Test SetValue
-	storage.SetValue("remote1", "type", "s3")
-	storage.SetValue("remote1", "env_auth", "false")
-
-	val, found := storage.GetValue("remote1", "type")
-	if !found || val != "s3" {
-		t.Errorf("GetValue failed. Expected 's3', got '%s'", val)
-	}
-
-	// Test HasSection
-	if !storage.HasSection("remote1") {
-		t.Error("HasSection should be true")
-	}
-	if storage.HasSection("nonexistent") {
-		t.Error("HasSection should be false")
-	}
-
-	// Test GetSectionList
-	sections := storage.GetSectionList()
-	if len(sections) != 1 || sections[0] != "remote1" {
-		t.Errorf("GetSectionList failed. Got %v", sections)
-	}
-
-	// Test GetKeyList
-	keys := storage.GetKeyList("remote1")
-	if len(keys) != 2 {
-		t.Errorf("GetKeyList failed. Expected length 2, got %d", len(keys))
-	}
-
-	// Test DeleteKey
-	deleted := storage.DeleteKey("remote1", "env_auth")
-	if !deleted {
-		t.Error("DeleteKey should return true")
-	}
-
-	keys = storage.GetKeyList("remote1")
-	if len(keys) != 1 || keys[0] != "type" {
-		t.Errorf("GetKeyList after delete failed. %v", keys)
-	}
-
-	// Test DeleteSection
-	storage.DeleteSection("remote1")
-	if storage.HasSection("remote1") {
-		t.Error("HasSection should be false after DeleteSection")
-	}
+	err := store.Load()
+	assert.NoError(t, err)
+	assert.Empty(t, store.GetSectionList())
 }
 
-func TestMongoStorage_Encryption(t *testing.T) {
-	storage, cleanup := setupTestDB(t)
+func TestSaveAndLoad_RoundTrip(t *testing.T) {
+	store, cleanup := setup(t)
 	defer cleanup()
 
-	// A sensitive key and normal key
-	storage.SetValue("secure", "type", "s3")
-	storage.SetValue("secure", "access_key_id", "my-secret-id")
-	storage.SetValue("secure", "secret_access_key", "my-super-secret-key")
+	store.SetValue("mys3", "type", "s3")
+	store.SetValue("mys3", "region", "us-west-2")
+	store.SetValue("mydrive", "type", "drive")
 
-	// Wait a tiny bit for the async save to finish
-	// (in a real test we'd sync this for testing purposes)
-	// For testing we will just verify what's actually in Mongo
+	require.NoError(t, store.Save())
 
-	// Read directly from Mongo bypassing the Storage interface
-	ctx := context.Background()
-	var doc RcloneConfig
-	err := storage.collection.FindOne(ctx, bson.M{"section": "secure"}).Decode(&doc)
-	if err != nil {
-		t.Fatalf("Failed to read directly from Mongo: %v", err)
-	}
+	// Reload the same store and verify data survived the round trip
+	require.NoError(t, store.Load())
 
-	if doc.Keys["type"] != "s3" {
-		t.Errorf("type should not be encrypted, got %v", doc.Keys["type"])
-	}
+	assert.True(t, store.HasSection("mys3"))
+	assert.True(t, store.HasSection("mydrive"))
 
-	if doc.Keys["secret_access_key"] == "my-super-secret-key" {
-		t.Error("secret_access_key should be encrypted in DB, found plaintext")
-	}
-
-	// Verify decrypt works via standard interface
-	val, found := storage.GetValue("secure", "secret_access_key")
-	if !found || val != "my-super-secret-key" {
-		t.Errorf("Failed to read/decrypt value. Got: %s", val)
-	}
+	v, found := store.GetValue("mys3", "region")
+	assert.True(t, found)
+	assert.Equal(t, "us-west-2", v)
 }
 
-func TestMongoStorage_Load(t *testing.T) {
-	storage, cleanup := setupTestDB(t)
+func TestSetValue_CreatesSection(t *testing.T) {
+	store, cleanup := setup(t)
 	defer cleanup()
 
-	storage.SetValue("state", "foo", "bar")
+	store.SetValue("remote1", "type", "s3")
 
-	// Wait a moment for async save
-	// Testing only
-	time.Sleep(100 * time.Millisecond)
+	v, found := store.GetValue("remote1", "type")
+	assert.True(t, found)
+	assert.Equal(t, "s3", v)
+}
 
-	// Create a new storage pointing to same DB to test Load
-	uri := "mongodb://localhost:27017"
-	key := []byte("12345678901234567890123456789012")
-	storage2, err := NewMongoStorage(context.Background(), uri, "rclone_test_db", "rclone_configs", key)
-	if err != nil {
-		t.Fatalf("Failed to create second storage: %v", err)
-	}
-	defer storage2.Close()
+func TestGetValue_MissingSection(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
 
-	if !storage2.HasSection("state") {
-		t.Error("Loaded storage did not have 'state' section")
-	}
+	v, found := store.GetValue("nonexistent", "type")
+	assert.False(t, found)
+	assert.Empty(t, v)
+}
 
-	val, found := storage2.GetValue("state", "foo")
-	if !found || val != "bar" {
-		t.Errorf("Loaded storage failed to get value. Got: %s", val)
-	}
+func TestGetValue_MissingKey(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	store.SetValue("remote1", "type", "s3")
+
+	v, found := store.GetValue("remote1", "nosuchkey")
+	assert.False(t, found)
+	assert.Empty(t, v)
+}
+
+func TestSetValue_Overwrites(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	store.SetValue("remote1", "type", "s3")
+	store.SetValue("remote1", "type", "drive") // overwrite
+
+	v, found := store.GetValue("remote1", "type")
+	assert.True(t, found)
+	assert.Equal(t, "drive", v)
+}
+
+func TestHasSection(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	assert.False(t, store.HasSection("remote1"))
+	store.SetValue("remote1", "type", "s3")
+	assert.True(t, store.HasSection("remote1"))
+}
+
+func TestGetSectionList(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	store.SetValue("alpha", "type", "s3")
+	store.SetValue("beta", "type", "drive")
+
+	sections := store.GetSectionList()
+	assert.ElementsMatch(t, []string{"alpha", "beta"}, sections)
+}
+
+func TestDeleteSection(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	store.SetValue("remote1", "type", "s3")
+	require.True(t, store.HasSection("remote1"))
+
+	store.DeleteSection("remote1")
+	assert.False(t, store.HasSection("remote1"))
+}
+
+func TestDeleteSection_Nonexistent(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	// Should not panic
+	store.DeleteSection("doesnotexist")
+}
+
+func TestGetKeyList(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	store.SetValue("remote1", "type", "s3")
+	store.SetValue("remote1", "region", "us-east-1")
+	store.SetValue("remote1", "bucket", "mybucket")
+
+	keys := store.GetKeyList("remote1")
+	assert.ElementsMatch(t, []string{"type", "region", "bucket"}, keys)
+}
+
+func TestGetKeyList_MissingSection(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	keys := store.GetKeyList("nonexistent")
+	assert.Nil(t, keys)
+}
+
+func TestDeleteKey(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	store.SetValue("remote1", "type", "s3")
+	store.SetValue("remote1", "region", "us-east-1")
+
+	deleted := store.DeleteKey("remote1", "region")
+	assert.True(t, deleted)
+
+	_, found := store.GetValue("remote1", "region")
+	assert.False(t, found)
+	// section still exists because "type" remains
+	assert.True(t, store.HasSection("remote1"))
+}
+
+func TestDeleteKey_LastKey_RemovesSection(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	store.SetValue("remote1", "type", "s3")
+	store.DeleteKey("remote1", "type")
+
+	// Section should be auto-removed when last key is deleted
+	assert.False(t, store.HasSection("remote1"))
+}
+
+func TestDeleteKey_Nonexistent(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	deleted := store.DeleteKey("nosection", "nokey")
+	assert.False(t, deleted)
+}
+
+func TestEncryption_DataIsEncryptedInMongoDB(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	store.SetValue("secure", "token", "supersecrettoken")
+	require.NoError(t, store.Save())
+
+	// Reload and verify plaintext is recovered correctly
+	require.NoError(t, store.Load())
+
+	v, found := store.GetValue("secure", "token")
+	assert.True(t, found)
+	assert.Equal(t, "supersecrettoken", v)
+}
+
+func TestSerialize(t *testing.T) {
+	store, cleanup := setup(t)
+	defer cleanup()
+
+	store.SetValue("mys3", "type", "s3")
+	store.SetValue("mys3", "region", "us-west-2")
+
+	out, err := store.Serialize()
+	assert.NoError(t, err)
+	assert.Contains(t, out, "[mys3]")
+	assert.Contains(t, out, "type = s3")
+	assert.Contains(t, out, "region = us-west-2")
+}
+
+func TestNew_InvalidKeyLength(t *testing.T) {
+	_, err := mongodb.New(nil, []byte("tooshort"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "32 bytes")
 }

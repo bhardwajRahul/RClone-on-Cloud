@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/rclone/rclone/fs/config"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -30,6 +31,8 @@ type MongoStorage struct {
 	collection *mongo.Collection
 	key        []byte // must be exactly 32 bytes (AES-256)
 }
+
+var _ config.Storage = (*MongoStorage)(nil)
 
 // New creates a MongoStorage. encKey must be exactly 32 bytes.
 func New(collection *mongo.Collection, encKey []byte) (*MongoStorage, error) {
