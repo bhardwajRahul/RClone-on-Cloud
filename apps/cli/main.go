@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ekarton/RClone-Cloud/apps/cli/cmd"
+	generate_token_cmd "github.com/ekarton/RClone-Cloud/apps/cli/cmd/generate_token"
+	migrate_cmd "github.com/ekarton/RClone-Cloud/apps/cli/cmd/migrate"
 )
 
 func main() {
@@ -24,7 +25,21 @@ func main() {
 			os.Exit(1)
 		}
 		configPath := os.Args[2]
-		cmd.Migrate(configPath)
+		migrate_cmd.Migrate(configPath)
+	case "generate-token":
+		if len(os.Args) < 4 {
+			fmt.Println("Usage: go run . generate-token <path/to/private_key> <user_id> <email>")
+			os.Exit(1)
+		}
+		privateKeyPath := os.Args[2]
+		userId := os.Args[3]
+		email := os.Args[4]
+		token, err := generate_token_cmd.GenerateToken(privateKeyPath, userId, email)
+		if err != nil {
+			fmt.Printf("Error generating token: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(*token)
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
 		os.Exit(1)

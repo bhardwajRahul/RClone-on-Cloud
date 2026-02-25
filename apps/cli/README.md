@@ -34,7 +34,7 @@ go run . migrate ~/.config/rclone/rclone.conf
 Build the app by running:
 
 ```shell
-mkdir bin
+mkdir -p bin
 go build -o bin/rclone-cli .
 ```
 
