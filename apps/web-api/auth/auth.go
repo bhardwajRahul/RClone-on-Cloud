@@ -115,12 +115,12 @@ func NewHandler(cfg Config) (*Handler, error) {
 
 // RegisterRoutes mounts /auth/login and /auth/callback on the given mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /auth/v1/google/login", h.HandleLogin)
-	mux.HandleFunc("GET /auth/v1/google/callback", h.HandleCallback)
+	mux.HandleFunc("GET /auth/v1/google/login", h.handleLogin)
+	mux.HandleFunc("GET /auth/v1/google/callback", h.handleCallback)
 }
 
-// HandleLogin redirects the user to Google's consent screen.
-func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
+// handleLogin redirects the user to Google's consent screen.
+func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	state, err := randomState(32)
 	if err != nil {
 		writeError(w, "could not generate state", http.StatusInternalServerError)
@@ -143,7 +143,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleCallback handles the redirect from Google after user consent.
-func (h *Handler) HandleCallback(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleCallback(w http.ResponseWriter, r *http.Request) {
 	// 1. Verify state for CSRF protection
 	cookie, err := r.Cookie(stateCookieName)
 	if err != nil || cookie.Value == "" {

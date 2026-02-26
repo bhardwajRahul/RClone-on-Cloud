@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -30,6 +33,32 @@ func init() {
 	}
 }
 
+// createTempPrivateKeyFile writes the test private key to a temporary file
+// and returns the file path and a cleanup function.
+func createTempPrivateKeyFile(t *testing.T) string {
+	t.Helper()
+
+	keyFile, err := os.CreateTemp("", "test_private_key_*.pem")
+	require.NoError(t, err)
+
+	privBytes := x509.MarshalPKCS1PrivateKey(testPrivateKey)
+	pemBlock := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privBytes,
+	}
+
+	err = pem.Encode(keyFile, pemBlock)
+	require.NoError(t, err)
+
+	keyFile.Close()
+
+	t.Cleanup(func() {
+		os.Remove(keyFile.Name())
+	})
+
+	return keyFile.Name()
+}
+
 // mockExchanger simulates the Google token exchange.
 type mockExchanger struct {
 	token *oauth2.Token
@@ -50,42 +79,43 @@ func (m *mockValidator) Validate(_ context.Context, _ string, _ string) (*idtoke
 	return m.payload, m.err
 }
 
-// newTestHandler creates a Handler with mocked Google dependencies.
-func newTestHandler(exchanger TokenExchanger, validator IDTokenValidator) *Handler {
-	oauthCfg := &oauth2.Config{
-		ClientID:     "test-client-id",
-		ClientSecret: "test-client-secret",
-		RedirectURL:  "http://localhost:8080/auth/v1/google/callback",
-		Scopes:       []string{"openid", "email"},
-		Endpoint: oauth2.Endpoint{
-			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
-			TokenURL: "https://oauth2.googleapis.com/token",
-		},
+// newTestHandler creates a Handler with mocked Google dependencies using NewHandler.
+func newTestHandler(t *testing.T, exchanger TokenExchanger, validator IDTokenValidator) (*Handler, *http.ServeMux) {
+	t.Helper()
+
+	keyPath := createTempPrivateKeyFile(t)
+
+	cfg := Config{
+		GoogleClientID:     "test-client-id",
+		GoogleClientSecret: "test-client-secret",
+		RedirectURL:        "http://localhost:8080/auth/v1/google/callback",
+		PrivateKeyPath:     keyPath,
+		AllowedGoogleIDs:   []string{"google-user-123", "user-456"},
 	}
 
-	allowed := map[string]bool{
-		"google-user-123": true,
-		"user-456":        true,
+	h, err := NewHandler(cfg)
+	require.NoError(t, err)
+
+	// Override real dependencies with the mocks if provided
+	if exchanger != nil {
+		h.exchanger = exchanger
+	}
+	if validator != nil {
+		h.idValidator = validator
 	}
 
-	return &Handler{
-		oauthConfig:      oauthCfg,
-		privateKey:       testPrivateKey,
-		tokenTTL:         1 * time.Hour,
-		exchanger:        exchanger,
-		idValidator:      validator,
-		allowedGoogleIDs: allowed,
-	}
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	return h, mux
 }
 
-// --- /auth/v1/google/login tests ---
-
 func TestLoginRedirect(t *testing.T) {
-	h := newTestHandler(nil, nil)
+	_, mux := newTestHandler(t, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/login", nil)
 	rec := httptest.NewRecorder()
-	h.HandleLogin(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	resp := rec.Result()
 	defer resp.Body.Close()
@@ -112,15 +142,13 @@ func TestLoginRedirect(t *testing.T) {
 	assert.True(t, stateCookie.HttpOnly)
 }
 
-// --- /auth/v1/google/callback tests ---
-
 func TestCallbackMissingCode(t *testing.T) {
-	h := newTestHandler(&mockExchanger{}, &mockValidator{})
+	_, mux := newTestHandler(t, &mockExchanger{}, &mockValidator{})
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?state=abc", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "abc"})
 	rec := httptest.NewRecorder()
-	h.HandleCallback(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	resp := rec.Result()
 	defer resp.Body.Close()
@@ -133,12 +161,12 @@ func TestCallbackMissingCode(t *testing.T) {
 }
 
 func TestCallbackMissingStateCookie(t *testing.T) {
-	h := newTestHandler(&mockExchanger{}, &mockValidator{})
+	_, mux := newTestHandler(t, &mockExchanger{}, &mockValidator{})
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=abc&state=abc", nil)
 	// No state cookie!
 	rec := httptest.NewRecorder()
-	h.HandleCallback(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	resp := rec.Result()
 	defer resp.Body.Close()
@@ -147,12 +175,12 @@ func TestCallbackMissingStateCookie(t *testing.T) {
 }
 
 func TestCallbackStateMismatch(t *testing.T) {
-	h := newTestHandler(&mockExchanger{}, &mockValidator{})
+	_, mux := newTestHandler(t, &mockExchanger{}, &mockValidator{})
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=abc&state=wrong", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "expected"})
 	rec := httptest.NewRecorder()
-	h.HandleCallback(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	resp := rec.Result()
 	defer resp.Body.Close()
@@ -168,12 +196,12 @@ func TestCallbackInvalidGoogleToken(t *testing.T) {
 	exchanger := &mockExchanger{
 		err: assert.AnError,
 	}
-	h := newTestHandler(exchanger, &mockValidator{})
+	_, mux := newTestHandler(t, exchanger, &mockValidator{})
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=badcode&state=abc", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "abc"})
 	rec := httptest.NewRecorder()
-	h.HandleCallback(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	resp := rec.Result()
 	defer resp.Body.Close()
@@ -193,12 +221,12 @@ func TestCallbackNoIDToken(t *testing.T) {
 		Expiry:      time.Now().Add(1 * time.Hour),
 	}
 	exchanger := &mockExchanger{token: oauthToken}
-	h := newTestHandler(exchanger, &mockValidator{})
+	_, mux := newTestHandler(t, exchanger, &mockValidator{})
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=goodcode&state=abc", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "abc"})
 	rec := httptest.NewRecorder()
-	h.HandleCallback(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	resp := rec.Result()
 	defer resp.Body.Close()
@@ -219,12 +247,12 @@ func TestCallbackIDTokenValidationFails(t *testing.T) {
 
 	exchanger := &mockExchanger{token: oauthToken}
 	validator := &mockValidator{err: assert.AnError}
-	h := newTestHandler(exchanger, validator)
+	_, mux := newTestHandler(t, exchanger, validator)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=goodcode&state=abc", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "abc"})
 	rec := httptest.NewRecorder()
-	h.HandleCallback(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	resp := rec.Result()
 	defer resp.Body.Close()
@@ -260,12 +288,12 @@ func TestCallbackSuccess(t *testing.T) {
 			},
 		},
 	}
-	h := newTestHandler(exchanger, validator)
+	_, mux := newTestHandler(t, exchanger, validator)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=goodcode&state=abc", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "abc"})
 	rec := httptest.NewRecorder()
-	h.HandleCallback(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	resp := rec.Result()
 	defer resp.Body.Close()
@@ -315,12 +343,12 @@ func TestSignAndVerifyJWT(t *testing.T) {
 			},
 		},
 	}
-	h := newTestHandler(exchanger, validator)
+	_, mux := newTestHandler(t, exchanger, validator)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=c&state=s", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "s"})
 	rec := httptest.NewRecorder()
-	h.HandleCallback(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	resp := rec.Result()
 	defer resp.Body.Close()
@@ -366,12 +394,12 @@ func TestCallbackMissingSub(t *testing.T) {
 			},
 		},
 	}
-	h := newTestHandler(exchanger, validator)
+	_, mux := newTestHandler(t, exchanger, validator)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=c&state=s", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "s"})
 	rec := httptest.NewRecorder()
-	h.HandleCallback(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	resp := rec.Result()
 	defer resp.Body.Close()
