@@ -17,6 +17,7 @@ func StartRCServer(ctx context.Context, store config.Storage, rcAddr string) (*r
 	// Internal RC server
 	rc.Opt.Enabled = true
 	rc.Opt.NoAuth = true
+	rc.Opt.Serve = true
 	rc.Opt.HTTP.ListenAddr = []string{rcAddr}
 
 	srv, err := rcserver.Start(ctx, &rc.Opt)
