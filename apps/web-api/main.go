@@ -65,15 +65,15 @@ func main() {
 	authHandler.RegisterRoutes(mux)
 	proxyHandler.RegisterRoutes(mux)
 
-	srv := &http.Server{Addr: env.ListenAddr, Handler: mux}
+	server := &http.Server{Addr: env.ListenAddr, Handler: mux}
 	go func() {
 		log.Printf("API listening on %s", env.ListenAddr)
-		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != http.ErrServerClosed {
 			log.Fatalf("public server: %v", err)
 		}
 	}()
 
 	<-ctx.Done()
 	log.Println("shutting down...")
-	srv.Shutdown(context.Background())
+	server.Shutdown(context.Background())
 }
