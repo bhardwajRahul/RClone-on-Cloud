@@ -4,8 +4,8 @@ This is a web API for RClone-Cloud.
 
 ## Features
 
-- [ ] OAuth2 authentication
-- [ ] Integrates with https://github.com/EKarton/RClone-Drive-WebUI
+- [x] OAuth2 authentication
+- [x] Full RClone RCD support (https://rclone.org/commands/rclone_rcd)
 
 ## Getting started
 
@@ -36,5 +36,11 @@ go build -o bin/rclone-svc .
 Run tests by running:
 
 ```shell
-go test ./... -v
+go test ./... -coverprofile=coverage.out
+```
+
+See code coverage after running the above command:
+
+```shell
+go tool cover -html=coverage.out
 ```
