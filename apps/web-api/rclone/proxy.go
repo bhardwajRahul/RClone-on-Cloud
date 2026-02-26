@@ -57,7 +57,7 @@ func NewProxyHandler(pubKeyPath string, rcAddr string) (*ProxyHandler, error) {
 func (h *ProxyHandler) RegisterRoutes(mux *http.ServeMux) {
 	target, _ := url.Parse("http://" + h.rcAddr)
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	mux.Handle("/api/v1/rclone", bearerMiddleware(h.publicKey, proxy))
+	mux.Handle("/api/v1/rclone/", bearerMiddleware(h.publicKey, http.StripPrefix("/api/v1/rclone", proxy)))
 }
 
 // --- Helpers ---

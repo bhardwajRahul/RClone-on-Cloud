@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 )
 
 // Env holds all environment-driven configuration for the application.
@@ -17,6 +18,7 @@ type Env struct {
 	GoogleClientSecret string
 	GoogleRedirectURL  string
 	ListenAddr         string
+	AllowedEmails      []string
 }
 
 // LoadEnv reads and validates all required environment variables,
@@ -28,6 +30,18 @@ func LoadEnv() Env {
 		log.Fatal("RCLONE_ENCRYPTION_KEY must be a 64-char hex string (32 bytes)")
 	}
 
+	allowedEmailsStr := requireEnv("ALLOWED_EMAILS")
+	var allowedEmails []string
+	for _, e := range strings.Split(allowedEmailsStr, ",") {
+		e = strings.TrimSpace(e)
+		if e != "" {
+			allowedEmails = append(allowedEmails, e)
+		}
+	}
+	if len(allowedEmails) == 0 {
+		log.Fatal("ALLOWED_EMAILS must contain at least one valid email address")
+	}
+
 	return Env{
 		EncryptionKey:      encKey,
 		MongoURI:           requireEnv("MONGODB_URI"),
@@ -37,6 +51,7 @@ func LoadEnv() Env {
 		GoogleClientSecret: requireEnv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/google/callback"),
 		ListenAddr:         getEnv("LISTEN_ADDR", ":8080"),
+		AllowedEmails:      allowedEmails,
 	}
 }
 

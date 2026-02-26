@@ -57,22 +57,25 @@ func newTestHandler(exchanger auth.TokenExchanger, validator auth.IDTokenValidat
 	oauthCfg := &oauth2.Config{
 		ClientID:     "test-client-id",
 		ClientSecret: "test-client-secret",
-		RedirectURL:  "http://localhost:8080/auth/callback",
+		RedirectURL:  "http://localhost:8080/auth/v1/google/callback",
 		Scopes:       []string{"openid", "email"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
 			TokenURL: "https://oauth2.googleapis.com/token",
 		},
 	}
-	return auth.NewHandlerWithDeps(oauthCfg, testPrivateKey, exchanger, validator)
+	return auth.NewHandlerWithDeps(oauthCfg, testPrivateKey, exchanger, validator, []string{
+		"user@example.com",
+		"test@test.com",
+	})
 }
 
-// --- /auth/login tests ---
+// --- /auth/v1/google/login tests ---
 
 func TestLoginRedirect(t *testing.T) {
 	h := newTestHandler(nil, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/login", nil)
+	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/login", nil)
 	rec := httptest.NewRecorder()
 	h.HandleLogin(rec, req)
 
@@ -101,12 +104,12 @@ func TestLoginRedirect(t *testing.T) {
 	assert.True(t, stateCookie.HttpOnly)
 }
 
-// --- /auth/callback tests ---
+// --- /auth/v1/google/callback tests ---
 
 func TestCallbackMissingCode(t *testing.T) {
 	h := newTestHandler(&mockExchanger{}, &mockValidator{})
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?state=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?state=abc", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "abc"})
 	rec := httptest.NewRecorder()
 	h.HandleCallback(rec, req)
@@ -124,7 +127,7 @@ func TestCallbackMissingCode(t *testing.T) {
 func TestCallbackMissingStateCookie(t *testing.T) {
 	h := newTestHandler(&mockExchanger{}, &mockValidator{})
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=abc&state=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=abc&state=abc", nil)
 	// No state cookie!
 	rec := httptest.NewRecorder()
 	h.HandleCallback(rec, req)
@@ -138,7 +141,7 @@ func TestCallbackMissingStateCookie(t *testing.T) {
 func TestCallbackStateMismatch(t *testing.T) {
 	h := newTestHandler(&mockExchanger{}, &mockValidator{})
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=abc&state=wrong", nil)
+	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=abc&state=wrong", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "expected"})
 	rec := httptest.NewRecorder()
 	h.HandleCallback(rec, req)
@@ -159,7 +162,7 @@ func TestCallbackInvalidGoogleToken(t *testing.T) {
 	}
 	h := newTestHandler(exchanger, &mockValidator{})
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=badcode&state=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=badcode&state=abc", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "abc"})
 	rec := httptest.NewRecorder()
 	h.HandleCallback(rec, req)
@@ -184,7 +187,7 @@ func TestCallbackNoIDToken(t *testing.T) {
 	exchanger := &mockExchanger{token: oauthToken}
 	h := newTestHandler(exchanger, &mockValidator{})
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=goodcode&state=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=goodcode&state=abc", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "abc"})
 	rec := httptest.NewRecorder()
 	h.HandleCallback(rec, req)
@@ -210,7 +213,7 @@ func TestCallbackIDTokenValidationFails(t *testing.T) {
 	validator := &mockValidator{err: assert.AnError}
 	h := newTestHandler(exchanger, validator)
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=goodcode&state=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=goodcode&state=abc", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "abc"})
 	rec := httptest.NewRecorder()
 	h.HandleCallback(rec, req)
@@ -251,7 +254,7 @@ func TestCallbackSuccess(t *testing.T) {
 	}
 	h := newTestHandler(exchanger, validator)
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=goodcode&state=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=goodcode&state=abc", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "abc"})
 	rec := httptest.NewRecorder()
 	h.HandleCallback(rec, req)
@@ -306,7 +309,7 @@ func TestSignAndVerifyJWT(t *testing.T) {
 	}
 	h := newTestHandler(exchanger, validator)
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=c&state=s", nil)
+	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=c&state=s", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "s"})
 	rec := httptest.NewRecorder()
 	h.HandleCallback(rec, req)
@@ -357,7 +360,7 @@ func TestCallbackMissingSub(t *testing.T) {
 	}
 	h := newTestHandler(exchanger, validator)
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=c&state=s", nil)
+	req := httptest.NewRequest(http.MethodGet, "/auth/v1/google/callback?code=c&state=s", nil)
 	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "s"})
 	rec := httptest.NewRecorder()
 	h.HandleCallback(rec, req)

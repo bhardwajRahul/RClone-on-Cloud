@@ -66,11 +66,12 @@ func (g *googleIDTokenValidator) Validate(ctx context.Context, idToken string, a
 
 // Handler serves the Google OAuth2 login flow and issues JWTs.
 type Handler struct {
-	oauthConfig *oauth2.Config
-	privateKey  *rsa.PrivateKey
-	tokenTTL    time.Duration
-	exchanger   TokenExchanger
-	idValidator IDTokenValidator
+	oauthConfig   *oauth2.Config
+	privateKey    *rsa.PrivateKey
+	tokenTTL      time.Duration
+	exchanger     TokenExchanger
+	idValidator   IDTokenValidator
+	allowedEmails map[string]bool
 }
 
 // Config holds the parameters needed to create a Handler.
@@ -79,6 +80,7 @@ type Config struct {
 	GoogleClientSecret string
 	RedirectURL        string
 	PrivateKeyPath     string
+	AllowedEmails      []string
 }
 
 // NewHandler creates an auth Handler from the given config.
@@ -96,23 +98,35 @@ func NewHandler(cfg Config) (*Handler, error) {
 		Endpoint:     google.Endpoint,
 	}
 
+	allowedEmails := make(map[string]bool)
+	for _, email := range cfg.AllowedEmails {
+		allowedEmails[email] = true
+	}
+
 	return &Handler{
-		oauthConfig: oauthCfg,
-		privateKey:  privateKey,
-		tokenTTL:    defaultTokenTTL,
-		exchanger:   oauthCfg,
-		idValidator: &googleIDTokenValidator{},
+		oauthConfig:   oauthCfg,
+		privateKey:    privateKey,
+		tokenTTL:      defaultTokenTTL,
+		exchanger:     oauthCfg,
+		idValidator:   &googleIDTokenValidator{},
+		allowedEmails: allowedEmails,
 	}, nil
 }
 
 // NewHandlerWithDeps creates a Handler with injectable dependencies (for testing).
-func NewHandlerWithDeps(oauthCfg *oauth2.Config, privateKey *rsa.PrivateKey, exchanger TokenExchanger, validator IDTokenValidator) *Handler {
+func NewHandlerWithDeps(oauthCfg *oauth2.Config, privateKey *rsa.PrivateKey, exchanger TokenExchanger, validator IDTokenValidator, allowedEmails []string) *Handler {
+	allowed := make(map[string]bool)
+	for _, email := range allowedEmails {
+		allowed[email] = true
+	}
+
 	return &Handler{
-		oauthConfig: oauthCfg,
-		privateKey:  privateKey,
-		tokenTTL:    defaultTokenTTL,
-		exchanger:   exchanger,
-		idValidator: validator,
+		oauthConfig:   oauthCfg,
+		privateKey:    privateKey,
+		tokenTTL:      defaultTokenTTL,
+		exchanger:     exchanger,
+		idValidator:   validator,
+		allowedEmails: allowed,
 	}
 }
 
@@ -198,8 +212,15 @@ func (h *Handler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	// 4. Extract user info from validated payload
 	userID, _ := payload.Claims["sub"].(string)
 	email, _ := payload.Claims["email"].(string)
-	if userID == "" {
-		writeError(w, "missing sub in id_token", http.StatusUnauthorized)
+	if userID == "" || email == "" {
+		writeError(w, "missing sub or email in id_token", http.StatusUnauthorized)
+		return
+	}
+
+	// SECURITY: Ensure the user is explicitly authorized to access the API.
+	if !h.allowedEmails[email] {
+		log.Printf("unauthorized login attempt from: %s", email)
+		writeError(w, "unauthorized access", http.StatusForbidden)
 		return
 	}
 
