@@ -118,8 +118,8 @@ func NewHandlerWithDeps(oauthCfg *oauth2.Config, privateKey *rsa.PrivateKey, exc
 
 // RegisterRoutes mounts /auth/login and /auth/callback on the given mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /auth/login", h.HandleLogin)
-	mux.HandleFunc("GET /auth/callback", h.HandleCallback)
+	mux.HandleFunc("GET /auth/v1/google/login", h.HandleLogin)
+	mux.HandleFunc("GET /auth/v1/google/callback", h.HandleCallback)
 }
 
 // HandleLogin redirects the user to Google's consent screen.

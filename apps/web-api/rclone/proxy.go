@@ -14,20 +14,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/rclone/rclone/fs/config"
-	"github.com/rclone/rclone/fs/rc"
-	"github.com/rclone/rclone/fs/rc/rcserver"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
-
-	mongocfg "github.com/ekarton/RClone-Cloud/apps/web-api/rclone/configs/mongodb"
-
-	_ "github.com/rclone/rclone/backend/all"
-	_ "github.com/rclone/rclone/fs/operations"
-	_ "github.com/rclone/rclone/fs/sync"
 )
-
-const rcAddr = "127.0.0.1:9090"
 
 // --- JWT types ---
 
@@ -50,66 +37,27 @@ func GetClaims(r *http.Request) *Claims {
 
 // --- Handler ---
 
-// Config holds all parameters needed to initialise the rclone handler.
-type Config struct {
-	MongoURI         string
-	EncryptionKey    []byte
-	JWTPublicKeyPath string
-}
-
-// Handler owns the rclone RC server life-cycle, MongoDB-backed config,
-// and the JWT-protected reverse proxy.
-type Handler struct {
+// ProxyHandler owns the JWT-protected reverse proxy.
+type ProxyHandler struct {
 	publicKey *rsa.PublicKey
-	client    *mongo.Client
+	rcAddr    string
 }
 
-// NewHandler connects to MongoDB, loads the encrypted rclone config,
-// starts the internal RC server, and prepares the JWT-protected proxy.
-func NewHandler(ctx context.Context, cfg Config) (*Handler, error) {
-	// MongoDB
-	client, err := mongo.Connect(options.Client().ApplyURI(cfg.MongoURI))
-	if err != nil {
-		return nil, fmt.Errorf("mongo connect: %w", err)
-	}
-
-	// Rclone config (encrypted in MongoDB)
-	store, err := mongocfg.New(client.Database("rclone").Collection("configs"), cfg.EncryptionKey)
-	if err != nil {
-		return nil, fmt.Errorf("init storage: %w", err)
-	}
-	if err := store.Load(); err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
-	}
-	config.SetData(store)
-
-	// Internal RC server
-	rc.Opt.Enabled = true
-	rc.Opt.NoAuth = true
-	rc.Opt.HTTP.ListenAddr = []string{rcAddr}
-	if _, err := rcserver.Start(ctx, &rc.Opt); err != nil {
-		return nil, fmt.Errorf("start rc server: %w", err)
-	}
-
-	// JWT public key
-	publicKey, err := loadRSAPublicKey(cfg.JWTPublicKeyPath)
+// NewProxyHandler prepares the JWT-protected proxy.
+func NewProxyHandler(pubKeyPath string, rcAddr string) (*ProxyHandler, error) {
+	publicKey, err := loadRSAPublicKey(pubKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("load public key: %w", err)
 	}
 
-	return &Handler{publicKey: publicKey, client: client}, nil
+	return &ProxyHandler{publicKey: publicKey, rcAddr: rcAddr}, nil
 }
 
 // RegisterRoutes mounts the JWT-protected rclone proxy on the given mux.
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	target, _ := url.Parse("http://" + rcAddr)
+func (h *ProxyHandler) RegisterRoutes(mux *http.ServeMux) {
+	target, _ := url.Parse("http://" + h.rcAddr)
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	mux.Handle("/", bearerMiddleware(h.publicKey, proxy))
-}
-
-// Shutdown disconnects the MongoDB client.
-func (h *Handler) Shutdown(ctx context.Context) error {
-	return h.client.Disconnect(ctx)
+	mux.Handle("/api/v1/rclone", bearerMiddleware(h.publicKey, proxy))
 }
 
 // --- Helpers ---

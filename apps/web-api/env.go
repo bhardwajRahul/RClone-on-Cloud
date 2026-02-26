@@ -35,7 +35,7 @@ func LoadEnv() Env {
 		JWTPrivateKeyPath:  requireEnv("JWT_PRIVATE_KEY_PATH"),
 		GoogleClientID:     requireEnv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: requireEnv("GOOGLE_CLIENT_SECRET"),
-		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/callback"),
+		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/google/callback"),
 		ListenAddr:         getEnv("LISTEN_ADDR", ":8080"),
 	}
 }

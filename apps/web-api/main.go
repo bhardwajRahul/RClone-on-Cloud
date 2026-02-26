@@ -10,6 +10,9 @@ import (
 
 	"github.com/ekarton/RClone-Cloud/apps/web-api/auth"
 	"github.com/ekarton/RClone-Cloud/apps/web-api/rclone"
+	mongocfg "github.com/ekarton/RClone-Cloud/apps/web-api/rclone/configs/mongodb"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 func main() {
@@ -18,16 +21,34 @@ func main() {
 
 	env := LoadEnv()
 
-	// -- Rclone (MongoDB config + RC server + JWT-protected proxy) --
-	rcloneHandler, err := rclone.NewHandler(ctx, rclone.Config{
-		MongoURI:         env.MongoURI,
-		EncryptionKey:    env.EncryptionKey,
-		JWTPublicKeyPath: env.JWTPublicKeyPath,
-	})
+	// -- MongoDB --
+	client, err := mongo.Connect(options.Client().ApplyURI(env.MongoURI))
 	if err != nil {
-		log.Fatalf("init rclone: %v", err)
+		log.Fatalf("mongo connect: %v", err)
 	}
-	defer rcloneHandler.Shutdown(ctx)
+	defer client.Disconnect(ctx)
+
+	// -- Rclone config (encrypted in MongoDB) --
+	store, err := mongocfg.New(client.Database("rclone").Collection("configs"), env.EncryptionKey)
+	if err != nil {
+		log.Fatalf("init storage: %v", err)
+	}
+	if err := store.Load(); err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+
+	// -- Rclone RC server --
+	rcServer, err := rclone.StartRCServer(ctx, store, "127.0.0.1:9090")
+	if err != nil {
+		log.Fatalf("init rclone rc server: %v", err)
+	}
+	defer rcServer.Shutdown()
+
+	// -- Rclone Proxy (JWT-protected) --
+	proxyHandler, err := rclone.NewProxyHandler(env.JWTPublicKeyPath, "127.0.0.1:9090")
+	if err != nil {
+		log.Fatalf("init rclone proxy: %v", err)
+	}
 
 	// -- Google OAuth2 --
 	authHandler, err := auth.NewHandler(auth.Config{
@@ -42,7 +63,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	authHandler.RegisterRoutes(mux)
-	rcloneHandler.RegisterRoutes(mux)
+	proxyHandler.RegisterRoutes(mux)
 
 	srv := &http.Server{Addr: env.ListenAddr, Handler: mux}
 	go func() {
