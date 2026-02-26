@@ -24,13 +24,13 @@ type Env struct {
 // LoadEnv reads and validates all required environment variables,
 // returning a populated Env or fataling on any missing/invalid value.
 func LoadEnv() Env {
-	encKeyHex := requireEnv("RCLONE_ENCRYPTION_KEY")
+	encKeyHex := requireEnv("RCLONE_CONFIG_ENCRYPTION_KEY")
 	encKey, err := hex.DecodeString(encKeyHex)
 	if err != nil || len(encKey) != 32 {
-		log.Fatal("RCLONE_ENCRYPTION_KEY must be a 64-char hex string (32 bytes)")
+		log.Fatal("RCLONE_CONFIG_ENCRYPTION_KEY must be a 64-char hex string (32 bytes)")
 	}
 
-	allowedGoogleIDsStr := requireEnv("ALLOWED_GOOGLE_IDS")
+	allowedGoogleIDsStr := requireEnv("AUTH_ALLOWED_GOOGLE_IDS")
 	var allowedGoogleIDs []string
 	for _, id := range strings.Split(allowedGoogleIDsStr, ",") {
 		id = strings.TrimSpace(id)
@@ -39,17 +39,17 @@ func LoadEnv() Env {
 		}
 	}
 	if len(allowedGoogleIDs) == 0 {
-		log.Fatal("ALLOWED_GOOGLE_IDS must contain at least one valid Google ID")
+		log.Fatal("AUTH_ALLOWED_GOOGLE_IDS must contain at least one valid Google ID")
 	}
 
 	return Env{
 		EncryptionKey:      encKey,
-		MongoURI:           requireEnv("MONGODB_URI"),
-		JWTPublicKeyPath:   requireEnv("JWT_PUBLIC_KEY_PATH"),
-		JWTPrivateKeyPath:  requireEnv("JWT_PRIVATE_KEY_PATH"),
-		GoogleClientID:     requireEnv("GOOGLE_CLIENT_ID"),
-		GoogleClientSecret: requireEnv("GOOGLE_CLIENT_SECRET"),
-		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/google/callback"),
+		MongoURI:           requireEnv("RCLONE_CONFIG_MONGODB_URI"),
+		JWTPublicKeyPath:   requireEnv("AUTH_JWT_PUBLIC_KEY_PATH"),
+		JWTPrivateKeyPath:  requireEnv("AUTH_JWT_PRIVATE_KEY_PATH"),
+		GoogleClientID:     requireEnv("AUTH_GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: requireEnv("AUTH_GOOGLE_CLIENT_SECRET"),
+		GoogleRedirectURL:  getEnv("AUTH_GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/v1/google/callback"),
 		ListenAddr:         getEnv("LISTEN_ADDR", ":8080"),
 		AllowedGoogleIDs:   allowedGoogleIDs,
 	}
