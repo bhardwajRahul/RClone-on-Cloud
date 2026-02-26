@@ -56,7 +56,7 @@ func main() {
 		GoogleClientSecret: env.GoogleClientSecret,
 		RedirectURL:        env.GoogleRedirectURL,
 		PrivateKeyPath:     env.JWTPrivateKeyPath,
-		AllowedEmails:      env.AllowedEmails,
+		AllowedGoogleIDs:   env.AllowedGoogleIDs,
 	})
 	if err != nil {
 		log.Fatalf("init auth: %v", err)

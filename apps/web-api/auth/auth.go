@@ -66,12 +66,12 @@ func (g *googleIDTokenValidator) Validate(ctx context.Context, idToken string, a
 
 // Handler serves the Google OAuth2 login flow and issues JWTs.
 type Handler struct {
-	oauthConfig   *oauth2.Config
-	privateKey    *rsa.PrivateKey
-	tokenTTL      time.Duration
-	exchanger     TokenExchanger
-	idValidator   IDTokenValidator
-	allowedEmails map[string]bool
+	oauthConfig      *oauth2.Config
+	privateKey       *rsa.PrivateKey
+	tokenTTL         time.Duration
+	exchanger        TokenExchanger
+	idValidator      IDTokenValidator
+	allowedGoogleIDs map[string]bool
 }
 
 // Config holds the parameters needed to create a Handler.
@@ -80,7 +80,7 @@ type Config struct {
 	GoogleClientSecret string
 	RedirectURL        string
 	PrivateKeyPath     string
-	AllowedEmails      []string
+	AllowedGoogleIDs   []string
 }
 
 // NewHandler creates an auth Handler from the given config.
@@ -98,36 +98,19 @@ func NewHandler(cfg Config) (*Handler, error) {
 		Endpoint:     google.Endpoint,
 	}
 
-	allowedEmails := make(map[string]bool)
-	for _, email := range cfg.AllowedEmails {
-		allowedEmails[email] = true
+	allowedGoogleIDs := make(map[string]bool)
+	for _, id := range cfg.AllowedGoogleIDs {
+		allowedGoogleIDs[id] = true
 	}
 
 	return &Handler{
-		oauthConfig:   oauthCfg,
-		privateKey:    privateKey,
-		tokenTTL:      defaultTokenTTL,
-		exchanger:     oauthCfg,
-		idValidator:   &googleIDTokenValidator{},
-		allowedEmails: allowedEmails,
+		oauthConfig:      oauthCfg,
+		privateKey:       privateKey,
+		tokenTTL:         defaultTokenTTL,
+		exchanger:        oauthCfg,
+		idValidator:      &googleIDTokenValidator{},
+		allowedGoogleIDs: allowedGoogleIDs,
 	}, nil
-}
-
-// NewHandlerWithDeps creates a Handler with injectable dependencies (for testing).
-func NewHandlerWithDeps(oauthCfg *oauth2.Config, privateKey *rsa.PrivateKey, exchanger TokenExchanger, validator IDTokenValidator, allowedEmails []string) *Handler {
-	allowed := make(map[string]bool)
-	for _, email := range allowedEmails {
-		allowed[email] = true
-	}
-
-	return &Handler{
-		oauthConfig:   oauthCfg,
-		privateKey:    privateKey,
-		tokenTTL:      defaultTokenTTL,
-		exchanger:     exchanger,
-		idValidator:   validator,
-		allowedEmails: allowed,
-	}
 }
 
 // RegisterRoutes mounts /auth/login and /auth/callback on the given mux.
@@ -217,9 +200,9 @@ func (h *Handler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// SECURITY: Ensure the user is explicitly authorized to access the API.
-	if !h.allowedEmails[email] {
-		log.Printf("unauthorized login attempt from: %s", email)
+	// SECURITY: Ensure the user is explicitly authorized to access the API by their Google ID (sub).
+	if !h.allowedGoogleIDs[userID] {
+		log.Printf("unauthorized login attempt from user ID: %s (email: %s)", userID, email)
 		writeError(w, "unauthorized access", http.StatusForbidden)
 		return
 	}

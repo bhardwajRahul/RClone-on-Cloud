@@ -1,4 +1,4 @@
-package auth_test
+package auth
 
 import (
 	"context"
@@ -15,8 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
-
-	"github.com/ekarton/RClone-Cloud/apps/web-api/auth"
 )
 
 // --- Test helpers ---
@@ -53,7 +51,7 @@ func (m *mockValidator) Validate(_ context.Context, _ string, _ string) (*idtoke
 }
 
 // newTestHandler creates a Handler with mocked Google dependencies.
-func newTestHandler(exchanger auth.TokenExchanger, validator auth.IDTokenValidator) *auth.Handler {
+func newTestHandler(exchanger TokenExchanger, validator IDTokenValidator) *Handler {
 	oauthCfg := &oauth2.Config{
 		ClientID:     "test-client-id",
 		ClientSecret: "test-client-secret",
@@ -64,10 +62,20 @@ func newTestHandler(exchanger auth.TokenExchanger, validator auth.IDTokenValidat
 			TokenURL: "https://oauth2.googleapis.com/token",
 		},
 	}
-	return auth.NewHandlerWithDeps(oauthCfg, testPrivateKey, exchanger, validator, []string{
-		"user@example.com",
-		"test@test.com",
-	})
+
+	allowed := map[string]bool{
+		"google-user-123": true,
+		"user-456":        true,
+	}
+
+	return &Handler{
+		oauthConfig:      oauthCfg,
+		privateKey:       testPrivateKey,
+		tokenTTL:         1 * time.Hour,
+		exchanger:        exchanger,
+		idValidator:      validator,
+		allowedGoogleIDs: allowed,
+	}
 }
 
 // --- /auth/v1/google/login tests ---
@@ -119,7 +127,7 @@ func TestCallbackMissingCode(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
-	var errResp auth.ErrorResponse
+	var errResp ErrorResponse
 	json.NewDecoder(resp.Body).Decode(&errResp)
 	assert.Contains(t, errResp.Error, "missing code")
 }
@@ -151,7 +159,7 @@ func TestCallbackStateMismatch(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 
-	var errResp auth.ErrorResponse
+	var errResp ErrorResponse
 	json.NewDecoder(resp.Body).Decode(&errResp)
 	assert.Contains(t, errResp.Error, "state mismatch")
 }
@@ -172,7 +180,7 @@ func TestCallbackInvalidGoogleToken(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-	var errResp auth.ErrorResponse
+	var errResp ErrorResponse
 	json.NewDecoder(resp.Body).Decode(&errResp)
 	assert.Contains(t, errResp.Error, "token exchange failed")
 }
@@ -197,7 +205,7 @@ func TestCallbackNoIDToken(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-	var errResp auth.ErrorResponse
+	var errResp ErrorResponse
 	json.NewDecoder(resp.Body).Decode(&errResp)
 	assert.Contains(t, errResp.Error, "no id_token")
 }
@@ -223,7 +231,7 @@ func TestCallbackIDTokenValidationFails(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-	var errResp auth.ErrorResponse
+	var errResp ErrorResponse
 	json.NewDecoder(resp.Body).Decode(&errResp)
 	assert.Contains(t, errResp.Error, "id token validation failed")
 }
@@ -264,7 +272,7 @@ func TestCallbackSuccess(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var tokenResp auth.TokenResponse
+	var tokenResp TokenResponse
 	err := json.NewDecoder(resp.Body).Decode(&tokenResp)
 	require.NoError(t, err)
 	require.NotEmpty(t, tokenResp.Token)
@@ -319,7 +327,7 @@ func TestSignAndVerifyJWT(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var tokenResp auth.TokenResponse
+	var tokenResp TokenResponse
 	json.NewDecoder(resp.Body).Decode(&tokenResp)
 
 	// Verify using the public key counterpart
@@ -370,7 +378,7 @@ func TestCallbackMissingSub(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-	var errResp auth.ErrorResponse
+	var errResp ErrorResponse
 	json.NewDecoder(resp.Body).Decode(&errResp)
 	assert.Contains(t, errResp.Error, "missing sub")
 }
