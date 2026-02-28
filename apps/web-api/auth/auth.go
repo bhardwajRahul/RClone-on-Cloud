@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -79,13 +78,13 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	RedirectURL        string
-	PrivateKeyPath     string
+	PrivateKeyPEM      string
 	AllowedGoogleIDs   []string
 }
 
 // NewHandler creates an auth Handler from the given config.
 func NewHandler(cfg Config) (*Handler, error) {
-	privateKey, err := loadRSAPrivateKey(cfg.PrivateKeyPath)
+	privateKey, err := loadRSAPrivateKey(cfg.PrivateKeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("load private key: %w", err)
 	}
@@ -234,18 +233,15 @@ func (h *Handler) signJWT(userID, email string) (string, error) {
 
 // --- Helpers ---
 
-// loadRSAPrivateKey reads a PEM-encoded RSA private key from disk.
-func loadRSAPrivateKey(path string) (*rsa.PrivateKey, error) {
-	if path == "" {
-		return nil, fmt.Errorf("JWT_PRIVATE_KEY_PATH is not set")
+// loadRSAPrivateKey parses a PEM-encoded RSA private key string.
+func loadRSAPrivateKey(pemContent string) (*rsa.PrivateKey, error) {
+	if pemContent == "" {
+		return nil, fmt.Errorf("JWT_PRIVATE_KEY is not set")
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read private key: %w", err)
-	}
-	block, _ := pem.Decode(data)
+
+	block, _ := pem.Decode([]byte(pemContent))
 	if block == nil {
-		return nil, fmt.Errorf("private key file is not valid PEM")
+		return nil, fmt.Errorf("private key is not valid PEM")
 	}
 
 	// Try PKCS#8 first, then fall back to PKCS#1

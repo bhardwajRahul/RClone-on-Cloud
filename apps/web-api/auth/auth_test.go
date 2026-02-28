@@ -9,7 +9,6 @@ import (
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -33,13 +32,9 @@ func init() {
 	}
 }
 
-// createTempPrivateKeyFile writes the test private key to a temporary file
-// and returns the file path and a cleanup function.
-func createTempPrivateKeyFile(t *testing.T) string {
+// getPrivateKeyPEM returns the test private key as a PEM string.
+func getPrivateKeyPEM(t *testing.T) string {
 	t.Helper()
-
-	keyFile, err := os.CreateTemp("", "test_private_key_*.pem")
-	require.NoError(t, err)
 
 	privBytes := x509.MarshalPKCS1PrivateKey(testPrivateKey)
 	pemBlock := &pem.Block{
@@ -47,16 +42,7 @@ func createTempPrivateKeyFile(t *testing.T) string {
 		Bytes: privBytes,
 	}
 
-	err = pem.Encode(keyFile, pemBlock)
-	require.NoError(t, err)
-
-	keyFile.Close()
-
-	t.Cleanup(func() {
-		os.Remove(keyFile.Name())
-	})
-
-	return keyFile.Name()
+	return string(pem.EncodeToMemory(pemBlock))
 }
 
 // mockExchanger simulates the Google token exchange.
@@ -83,13 +69,13 @@ func (m *mockValidator) Validate(_ context.Context, _ string, _ string) (*idtoke
 func newTestHandler(t *testing.T, exchanger TokenExchanger, validator IDTokenValidator) (*Handler, *http.ServeMux) {
 	t.Helper()
 
-	keyPath := createTempPrivateKeyFile(t)
+	pem := getPrivateKeyPEM(t)
 
 	cfg := Config{
 		GoogleClientID:     "test-client-id",
 		GoogleClientSecret: "test-client-secret",
 		RedirectURL:        "http://localhost:8080/auth/v1/google/callback",
-		PrivateKeyPath:     keyPath,
+		PrivateKeyPEM:      pem,
 		AllowedGoogleIDs:   []string{"google-user-123", "user-456"},
 	}
 

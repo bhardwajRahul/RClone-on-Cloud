@@ -11,8 +11,8 @@ import (
 type Env struct {
 	EncryptionKey      string
 	MongoURI           string
-	JWTPublicKeyPath   string
-	JWTPrivateKeyPath  string
+	JWTPublicKeyPEM    string
+	JWTPrivateKeyPEM   string
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
@@ -38,8 +38,8 @@ func LoadEnv() Env {
 	return Env{
 		EncryptionKey:      requireEnv("RCLONE_CONFIG_ENCRYPTION_KEY"),
 		MongoURI:           requireEnv("RCLONE_CONFIG_MONGODB_URI"),
-		JWTPublicKeyPath:   requireEnv("AUTH_JWT_PUBLIC_KEY_PATH"),
-		JWTPrivateKeyPath:  requireEnv("AUTH_JWT_PRIVATE_KEY_PATH"),
+		JWTPublicKeyPEM:    requireEnv("AUTH_JWT_PUBLIC_KEY"),
+		JWTPrivateKeyPEM:   requireEnv("AUTH_JWT_PRIVATE_KEY"),
 		GoogleClientID:     requireEnv("AUTH_GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: requireEnv("AUTH_GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:  getEnv("AUTH_GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/v1/google/callback"),

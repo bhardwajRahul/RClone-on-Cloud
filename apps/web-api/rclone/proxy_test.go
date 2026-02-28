@@ -8,8 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -35,7 +33,7 @@ func TestProxyHandler(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	// Save Public Key to a temporary PEM file for NewProxyHandler
+	// Encode Public Key to a PEM string for NewProxyHandler
 	pubBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
 	require.NoError(t, err)
 
@@ -43,20 +41,14 @@ func TestProxyHandler(t *testing.T) {
 		Type:  "PUBLIC KEY",
 		Bytes: pubBytes,
 	}
-
-	pubKeyFile := filepath.Join(t.TempDir(), "public_key.pem")
-	f, err := os.Create(pubKeyFile)
-	require.NoError(t, err)
-	err = pem.Encode(f, pemBlock)
-	require.NoError(t, err)
-	f.Close()
+	pubKeyPEM := string(pem.EncodeToMemory(pemBlock))
 
 	// 3. Initialize ProxyHandler
 	// Extract just the host:port from the backend URL string
 	// backend.URL typically looks like "http://127.0.0.1:54321"
 	rcAddr := backend.URL[7:] // strips "http://"
 
-	proxy, err := NewProxyHandler(pubKeyFile, rcAddr)
+	proxy, err := NewProxyHandler(pubKeyPEM, rcAddr)
 	require.NoError(t, err)
 
 	// Register it with a test router
@@ -196,33 +188,27 @@ func TestProxyHandler(t *testing.T) {
 }
 
 func TestNewProxyHandlerFailures(t *testing.T) {
-	t.Run("Missing Public Key File", func(t *testing.T) {
-		_, err := NewProxyHandler("/does/not/exist.pem", "localhost:8080")
+	t.Run("Empty Public Key String", func(t *testing.T) {
+		_, err := NewProxyHandler("", "localhost:8080")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "read public key")
+		assert.Contains(t, err.Error(), "JWT_PUBLIC_KEY is not set")
 	})
 
-	t.Run("Invalid Key Data", func(t *testing.T) {
-		badFile := filepath.Join(t.TempDir(), "bad.pem")
-		os.WriteFile(badFile, []byte("NOT A PEM"), 0644)
-
-		_, err := NewProxyHandler(badFile, "localhost:8080")
+	t.Run("Invalid PEM Data", func(t *testing.T) {
+		_, err := NewProxyHandler("NOT A PEM", "localhost:8080")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "public key file is not valid PEM")
+		assert.Contains(t, err.Error(), "public key is not valid PEM")
 	})
 
 	t.Run("Invalid Key Type", func(t *testing.T) {
 		// Create a PEM block but not an RSA public key
-		badFile := filepath.Join(t.TempDir(), "wrong_type.pem")
 		pemBlock := &pem.Block{
 			Type:  "PUBLIC KEY",
 			Bytes: []byte("definitely not an rsa key"),
 		}
-		f, _ := os.Create(badFile)
-		pem.Encode(f, pemBlock)
-		f.Close()
+		pemStr := string(pem.EncodeToMemory(pemBlock))
 
-		_, err := NewProxyHandler(badFile, "localhost:8080")
+		_, err := NewProxyHandler(pemStr, "localhost:8080")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parse public key")
 	})

@@ -14,14 +14,35 @@ Prerequisites:
 - Docker
 - Go
 
+1. First, follow [this guide](./setup_oauth2.md) to create a new GCP project for the Web API, create a new OAuth2 client, and obtain the client ID and client secrets from your newly created OAuth2 client.
+
+1. Generate public and private keys by running:
+
+   ```bash
+   openssl genpkey -algorithm ed25519 -out private.pem
+   openssl pkey -in private.pem -pubout -out public.pem
+   ```
+
+   It will create two files: `private.pem` and `public.pem`.
+
+1. Now, run this to set the `private.pem` file and `public.pem` file as a single string:
+
+   ```bash
+   export ACCESS_TOKEN_JWT_PRIVATE_KEY=$(tr -d '\n' < private.pem)
+   export ACCESS_TOKEN_JWT_PUBLIC_KEY=$(tr -d '\n' < public.pem)
+
+   echo ${ACCESS_TOKEN_JWT_PRIVATE_KEY}
+   echo ${ACCESS_TOKEN_JWT_PUBLIC_KEY}
+   ```
+
 1. First, build a `.env` file with these required environment variables:
 
 ```
 RCLONE_CONFIG_ENCRYPTION_KEY=<Any string used as a secret>
 RCLONE_CONFIG_MONGODB_URI=<Your MongoDB URI>
 AUTH_ALLOWED_GOOGLE_IDS=<Your Google IDs>
-AUTH_JWT_PUBLIC_KEY_PATH=<Your JWT public key path>
-AUTH_JWT_PRIVATE_KEY_PATH=<Your JWT private key path>
+AUTH_JWT_PUBLIC_KEY=<Your JWT public key (Raw PEM string)>
+AUTH_JWT_PRIVATE_KEY=<Your JWT private key (Raw PEM string)>
 AUTH_GOOGLE_CLIENT_ID=<Your Google client ID>
 AUTH_GOOGLE_CLIENT_SECRET=123
 AUTH_GOOGLE_REDIRECT_URL=http://localhost:3000/auth/v1/google/callback

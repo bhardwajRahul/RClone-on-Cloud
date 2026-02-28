@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -44,8 +43,8 @@ type ProxyHandler struct {
 }
 
 // NewProxyHandler prepares the JWT-protected proxy.
-func NewProxyHandler(pubKeyPath string, rcAddr string) (*ProxyHandler, error) {
-	publicKey, err := loadRSAPublicKey(pubKeyPath)
+func NewProxyHandler(pubKeyPEM string, rcAddr string) (*ProxyHandler, error) {
+	publicKey, err := loadRSAPublicKey(pubKeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("load public key: %w", err)
 	}
@@ -62,14 +61,14 @@ func (h *ProxyHandler) RegisterRoutes(mux *http.ServeMux) {
 
 // --- Helpers ---
 
-func loadRSAPublicKey(path string) (*rsa.PublicKey, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read public key: %w", err)
+func loadRSAPublicKey(pemContent string) (*rsa.PublicKey, error) {
+	if pemContent == "" {
+		return nil, fmt.Errorf("JWT_PUBLIC_KEY is not set")
 	}
-	block, _ := pem.Decode(data)
+
+	block, _ := pem.Decode([]byte(pemContent))
 	if block == nil {
-		return nil, fmt.Errorf("public key file is not valid PEM")
+		return nil, fmt.Errorf("public key is not valid PEM")
 	}
 	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {

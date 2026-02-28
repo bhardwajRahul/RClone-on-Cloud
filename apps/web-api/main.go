@@ -45,7 +45,7 @@ func main() {
 	defer rcServer.Shutdown()
 
 	// -- Rclone Proxy (JWT-protected) --
-	proxyHandler, err := rclone.NewProxyHandler(env.JWTPublicKeyPath, "127.0.0.1:9090")
+	proxyHandler, err := rclone.NewProxyHandler(env.JWTPublicKeyPEM, "127.0.0.1:9090")
 	if err != nil {
 		log.Fatalf("init rclone proxy: %v", err)
 	}
@@ -55,7 +55,7 @@ func main() {
 		GoogleClientID:     env.GoogleClientID,
 		GoogleClientSecret: env.GoogleClientSecret,
 		RedirectURL:        env.GoogleRedirectURL,
-		PrivateKeyPath:     env.JWTPrivateKeyPath,
+		PrivateKeyPEM:      env.JWTPrivateKeyPEM,
 		AllowedGoogleIDs:   env.AllowedGoogleIDs,
 	})
 	if err != nil {
