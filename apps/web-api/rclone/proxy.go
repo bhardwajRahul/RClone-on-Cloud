@@ -45,8 +45,6 @@ func (h *ProxyHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("/api/v1/rclone/", bearerMiddleware(h.publicKey, http.StripPrefix("/api/v1/rclone", proxy)))
 }
 
-// --- Middleware ---
-
 func bearerMiddleware(publicKey any, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, ok := extractBearer(r)

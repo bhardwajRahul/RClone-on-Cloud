@@ -95,5 +95,5 @@ docker build -t rclone-cloud-web-api .
 Ensure you have a `.env` file populated with the required environment variables.
 
 ```shell
-docker run --env-file .env -p 8080:8080 rclone-cloud-web-api
+docker run --env-file .env -p 9000:9000 rclone-cloud-web-api
 ```
