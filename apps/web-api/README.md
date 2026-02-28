@@ -50,7 +50,7 @@ go build -o bin/rclone-svc .
 5. Run tests by running:
 
 ```shell
-go test ./... -coverprofile=coverage.out
+go test ./... -v -coverprofile=coverage.out
 ```
 
 6. See code coverage after running the above command:

@@ -41,5 +41,11 @@ go build -o bin/rclone-cli .
 Run tests by running:
 
 ```shell
-go test ./... -v
+go test ./... -v -coverprofile=coverage.out
+```
+
+See test coverage by running:
+
+```shell
+go tool cover -html=coverage.out
 ```
