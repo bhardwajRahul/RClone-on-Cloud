@@ -48,7 +48,7 @@ func main() {
 		log.Fatalf("init rclone rc server: %v", err)
 	}
 	defer func() {
-		log.Printf("shutting down rclone rc server...")
+		log.Println("shutting down rclone rc server...")
 		if err := rcServer.Shutdown(); err != nil {
 			log.Printf("error shutting down rclone rc server: %v", err)
 		}
