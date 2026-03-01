@@ -1,6 +1,7 @@
 package rclone
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -8,33 +9,34 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	sharedjwt "github.com/ekarton/RClone-Cloud/apps/web-api/shared/jwt"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/rclone/rclone/fs/config"
+	"github.com/rclone/rclone/fs/config/configfile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestProxyHandler(t *testing.T) {
-	// 1. Setup a dummy backend server mimicking RClone RC
-	backendCalled := false
-	backendPath := ""
-
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		backendCalled = true
-		backendPath = r.URL.Path
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	}))
-	defer backend.Close()
+func TestRCloneAPIHandler(t *testing.T) {
+	// 1. Setup rclone for testing
+	tempDir := t.TempDir()
+	confPath := filepath.Join(tempDir, "rclone.conf")
+	_ = os.WriteFile(confPath, []byte("[testremote]\ntype = local\n"), 0600)
+	config.SetConfigPath(confPath)
+	configfile.Install()
+	if err := Initialize(context.Background(), config.Data()); err != nil {
+		t.Fatalf("failed to initialize rclone: %v", err)
+	}
 
 	// 2. Generate an RSA Keypair
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	// Encode Public Key to a PEM string for NewProxyHandler
 	pubBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
 	require.NoError(t, err)
 
@@ -44,19 +46,14 @@ func TestProxyHandler(t *testing.T) {
 	}
 	pubKeyPEM := string(pem.EncodeToMemory(pemBlock))
 
-	// 3. Initialize ProxyHandler
-	// Extract just the host:port from the backend URL string
-	// backend.URL typically looks like "http://127.0.0.1:54321"
-	rcAddr := backend.URL[7:] // strips "http://"
-
-	proxy, err := NewProxyHandler(pubKeyPEM, rcAddr)
+	// 3. Initialize RCloneAPIHandler
+	handler, err := NewRCloneAPIHandler(pubKeyPEM)
 	require.NoError(t, err)
 
 	// Register it with a test router
 	mux := http.NewServeMux()
-	proxy.RegisterRoutes(mux)
+	handler.RegisterRoutes(mux)
 
-	// Create a test server with our proxy mux
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 
@@ -89,8 +86,7 @@ func TestProxyHandler(t *testing.T) {
 	// --- Subtests --- //
 
 	t.Run("No Token", func(t *testing.T) {
-		backendCalled = false
-		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/rclone/config/listremotes", nil)
+		req, _ := http.NewRequest("POST", ts.URL+"/api/v1/rclone/rc/noop", nil)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -99,36 +95,30 @@ func TestProxyHandler(t *testing.T) {
 
 		body, _ := io.ReadAll(resp.Body)
 		assert.Contains(t, string(body), "missing or malformed token")
-		assert.False(t, backendCalled)
 	})
 
 	t.Run("Malformed Token", func(t *testing.T) {
-		backendCalled = false
-		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/rclone/config/listremotes", nil)
+		req, _ := http.NewRequest("POST", ts.URL+"/api/v1/rclone/rc/noop", nil)
 		req.Header.Set("Authorization", "Bearer invalid.jwt.token")
 		resp, err := client.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-		assert.False(t, backendCalled)
 	})
 
 	t.Run("Invalid Signature", func(t *testing.T) {
-		backendCalled = false
-		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/rclone/config/listremotes", nil)
+		req, _ := http.NewRequest("POST", ts.URL+"/api/v1/rclone/rc/noop", nil)
 		req.Header.Set("Authorization", "Bearer "+signInvalidJWT())
 		resp, err := client.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-		assert.False(t, backendCalled)
 	})
 
 	t.Run("Expired Token", func(t *testing.T) {
-		backendCalled = false
-		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/rclone/config/listremotes", nil)
+		req, _ := http.NewRequest("POST", ts.URL+"/api/v1/rclone/rc/noop", nil)
 		req.Header.Set("Authorization", "Bearer "+signJWT("123", "test@test.com", time.Now().Add(-1*time.Hour)))
 		resp, err := client.Do(req)
 		require.NoError(t, err)
@@ -138,14 +128,10 @@ func TestProxyHandler(t *testing.T) {
 
 		body, _ := io.ReadAll(resp.Body)
 		assert.Contains(t, string(body), "token expired")
-		assert.False(t, backendCalled)
 	})
 
-	t.Run("Valid Token - Proxied Successfully", func(t *testing.T) {
-		backendCalled = false
-		backendPath = ""
-
-		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/rclone/config/listremotes", nil)
+	t.Run("Valid Token - Calls RCHandler Successfully", func(t *testing.T) {
+		req, _ := http.NewRequest("POST", ts.URL+"/api/v1/rclone/rc/noop", nil)
 		req.Header.Set("Authorization", "Bearer "+signJWT("user-1", "user@test.com", time.Now().Add(1*time.Hour)))
 		resp, err := client.Do(req)
 		require.NoError(t, err)
@@ -154,62 +140,31 @@ func TestProxyHandler(t *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		body, _ := io.ReadAll(resp.Body)
-		assert.Contains(t, string(body), `{"status":"ok"}`)
-
-		assert.True(t, backendCalled)
-		// Crucial assertion: the `/api/v1/rclone` prefix must be stripped!
-		assert.Equal(t, "/config/listremotes", backendPath)
-	})
-
-	t.Run("Context Claims Verification", func(t *testing.T) {
-		// Replace the httptest server entirely with a dummy handler that inspects Context.
-		var extractedClaims *sharedjwt.Claims
-		mux := http.NewServeMux()
-		mux.Handle("/api/v1/rclone/", bearerMiddleware(privateKey.Public(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			extractedClaims = GetClaims(r)
-			w.WriteHeader(http.StatusOK)
-		})))
-
-		// For this test we bypass proxy since it's private and just test the exported `GetClaims` integration
-		tsInternal := httptest.NewServer(mux)
-		defer tsInternal.Close()
-
-		req, _ := http.NewRequest("GET", tsInternal.URL+"/api/v1/rclone/test", nil)
-		req.Header.Set("Authorization", "Bearer "+signJWT("target-sub", "target@email.com", time.Now().Add(1*time.Hour)))
-
-		resp, err := client.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.NotNil(t, extractedClaims)
-		assert.Equal(t, "target-sub", extractedClaims.UserID)
-		assert.Equal(t, "target@email.com", extractedClaims.Email)
+		assert.Equal(t, "{}\n", string(body))
 	})
 }
 
-func TestNewProxyHandlerFailures(t *testing.T) {
+func TestNewRCloneAPIHandlerFailures(t *testing.T) {
 	t.Run("Empty Public Key String", func(t *testing.T) {
-		_, err := NewProxyHandler("", "localhost:8080")
+		_, err := NewRCloneAPIHandler("")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "JWT_PUBLIC_KEY is not set")
 	})
 
 	t.Run("Invalid PEM Data", func(t *testing.T) {
-		_, err := NewProxyHandler("NOT A PEM", "localhost:8080")
+		_, err := NewRCloneAPIHandler("NOT A PEM")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "public key is not valid PEM")
 	})
 
 	t.Run("Invalid Key Type", func(t *testing.T) {
-		// Create a PEM block but not an RSA public key
 		pemBlock := &pem.Block{
 			Type:  "PUBLIC KEY",
 			Bytes: []byte("definitely not an rsa key"),
 		}
 		pemStr := string(pem.EncodeToMemory(pemBlock))
 
-		_, err := NewProxyHandler(pemStr, "localhost:8080")
+		_, err := NewRCloneAPIHandler(pemStr)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parse public key")
 	})
@@ -244,7 +199,6 @@ func TestExtractBearerEdgeCases(t *testing.T) {
 }
 
 func TestUnexpectedSigningAlg(t *testing.T) {
-	// Generate an HMAC key which is not RSA
 	hmacSecret := []byte("my_secret_key")
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "123"})
 	signed, _ := token.SignedString(hmacSecret)

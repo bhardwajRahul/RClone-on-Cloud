@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"strings"
 
 	sharedjwt "github.com/ekarton/RClone-Cloud/apps/web-api/shared/jwt"
@@ -22,27 +20,25 @@ func GetClaims(r *http.Request) *sharedjwt.Claims {
 
 // --- Handler ---
 
-// ProxyHandler owns the JWT-protected reverse proxy.
-type ProxyHandler struct {
+// RCloneAPIHandler owns the JWT-protected RClone API.
+type RCloneAPIHandler struct {
 	publicKey any
-	rcAddr    string
 }
 
-// NewProxyHandler prepares the JWT-protected proxy.
-func NewProxyHandler(pubKeyPEM string, rcAddr string) (*ProxyHandler, error) {
+// NewRCloneAPIHandler prepares the JWT-protected RClone API handler.
+func NewRCloneAPIHandler(pubKeyPEM string) (*RCloneAPIHandler, error) {
 	publicKey, err := sharedjwt.LoadPublicKey(pubKeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("load public key: %w", err)
 	}
 
-	return &ProxyHandler{publicKey: publicKey, rcAddr: rcAddr}, nil
+	return &RCloneAPIHandler{publicKey: publicKey}, nil
 }
 
-// RegisterRoutes mounts the JWT-protected rclone proxy on the given mux.
-func (h *ProxyHandler) RegisterRoutes(mux *http.ServeMux) {
-	target, _ := url.Parse("http://" + h.rcAddr)
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	mux.Handle("/api/v1/rclone/", bearerMiddleware(h.publicKey, http.StripPrefix("/api/v1/rclone", proxy)))
+// RegisterRoutes mounts the JWT-protected rclone API on the given mux.
+func (h *RCloneAPIHandler) RegisterRoutes(mux *http.ServeMux) {
+	handler := NewRCHandler()
+	mux.Handle("/api/v1/rclone/", bearerMiddleware(h.publicKey, http.StripPrefix("/api/v1/rclone", handler)))
 }
 
 func bearerMiddleware(publicKey any, next http.Handler) http.Handler {

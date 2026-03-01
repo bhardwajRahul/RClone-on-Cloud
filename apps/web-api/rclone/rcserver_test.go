@@ -6,12 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/config/configfile"
@@ -19,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStartRCServer(t *testing.T) {
+func TestRCHandler(t *testing.T) {
 	// 1. Create a temporary directory with a test file
 	tempDir := t.TempDir()
 	testFilePath := filepath.Join(tempDir, "hello.txt")
@@ -41,34 +40,17 @@ remote = %s
 	configfile.Install()
 	store := config.Data()
 
-	// 3. Boot StartRCServer on a dynamic port
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	port := getFreePort()
-	rcAddr := fmt.Sprintf("127.0.0.1:%d", port)
-
-	server, err := StartRCServer(ctx, store, rcAddr)
+	// 3. Initialize rclone
+	ctx := context.Background()
+	err = Initialize(ctx, store)
 	require.NoError(t, err)
-	defer server.Shutdown()
 
-	baseURL := fmt.Sprintf("http://%s", rcAddr)
+	handler := NewRCHandler()
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
 
-	// Basic HTTP client with a short timeout
-	client := &http.Client{Timeout: 5 * time.Second}
-
-	// Wait for the server to bind
-	var ready bool
-	for i := 0; i < 20; i++ {
-		resp, err := client.Post(baseURL+"/rc/noop", "application/json", bytes.NewReader([]byte("{}")))
-		if err == nil {
-			resp.Body.Close()
-			ready = true
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	require.True(t, ready, "RC server did not become ready in time")
+	baseURL := ts.URL
+	client := ts.Client()
 
 	// 4. Test mapping of aliases/remotes
 	t.Run("List Remotes", func(t *testing.T) {
@@ -124,19 +106,4 @@ remote = %s
 
 		assert.Equal(t, "world", string(data))
 	})
-}
-
-// getFreePort asks the kernel for a free open port that is ready to use.
-func getFreePort() int {
-	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
-	if err != nil {
-		panic(err)
-	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		panic(err)
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port
 }

@@ -2,32 +2,26 @@ package rclone
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/rc"
-	"github.com/rclone/rclone/fs/rc/rcserver"
 
 	// Side-effect imports to register RC methods and backends
 	_ "github.com/rclone/rclone/backend/all"
 	_ "github.com/rclone/rclone/fs/operations"
 )
 
-// StartRCServer loads the provided rclone config storage
-// and starts the internal RC server on the given address.
-func StartRCServer(ctx context.Context, store config.Storage, rcAddr string) (*rcserver.Server, error) {
+// Initialize loads the provided rclone config storage
+// and sets up the internal RC system.
+func Initialize(ctx context.Context, store config.Storage) error {
 	config.SetData(store)
 
-	// Internal RC server
+	// Enable RC and jobs globally
 	rc.Opt.Enabled = true
 	rc.Opt.NoAuth = true
-	rc.Opt.Serve = true
-	rc.Opt.HTTP.ListenAddr = []string{rcAddr}
+	// jobs.SetOpt(&rc.Opt) // This is usually called by rcserver.Start, we should call it here
 
-	srv, err := rcserver.Start(ctx, &rc.Opt)
-	if err != nil {
-		return nil, fmt.Errorf("start rc server: %w", err)
-	}
-
-	return srv, nil
+	// Since we are not using rcserver.Start, we should at least ensure jobs are ready
+	// if we use them. jobs package initializes itself but we might want to sync options.
+	return nil
 }

@@ -42,24 +42,6 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	// -- Rclone RC server --
-	rcServer, err := rclone.StartRCServer(ctx, store, "127.0.0.1:9090")
-	if err != nil {
-		log.Fatalf("init rclone rc server: %v", err)
-	}
-	defer func() {
-		log.Println("shutting down rclone rc server...")
-		if err := rcServer.Shutdown(); err != nil {
-			log.Printf("error shutting down rclone rc server: %v", err)
-		}
-	}()
-
-	// -- Rclone Proxy (JWT-protected) --
-	proxyHandler, err := rclone.NewProxyHandler(env.JWTPublicKeyPEM, "127.0.0.1:9090")
-	if err != nil {
-		log.Fatalf("init rclone proxy: %v", err)
-	}
-
 	// -- Google OAuth2 --
 	authHandler, err := auth.NewHandler(auth.Config{
 		GoogleClientID:     env.GoogleClientID,
@@ -72,9 +54,20 @@ func main() {
 		log.Fatalf("init auth: %v", err)
 	}
 
+	// -- Rclone system initialization --
+	if err := rclone.Initialize(ctx, store); err != nil {
+		log.Fatalf("init rclone: %v", err)
+	}
+
+	// -- Rclone API (Direct integration, JWT-protected) --
+	rcloneHandler, err := rclone.NewRCloneAPIHandler(env.JWTPublicKeyPEM)
+	if err != nil {
+		log.Fatalf("init rclone handler: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	authHandler.RegisterRoutes(mux)
-	proxyHandler.RegisterRoutes(mux)
+	rcloneHandler.RegisterRoutes(mux)
 
 	server := &http.Server{Addr: env.ListenAddr, Handler: mux}
 	go func() {
