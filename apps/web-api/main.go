@@ -54,13 +54,9 @@ func main() {
 		log.Fatalf("init auth: %v", err)
 	}
 
-	// -- Rclone system initialization --
-	if err := rclone.Initialize(ctx, store); err != nil {
-		log.Fatalf("init rclone: %v", err)
-	}
-
 	// -- Rclone API (Direct integration, JWT-protected) --
-	rcloneHandler, err := rclone.NewRCloneAPIHandler(env.JWTPublicKeyPEM)
+	// This also initializes the global RClone system state.
+	rcloneHandler, err := rclone.NewRCloneAPIHandler(env.JWTPublicKeyPEM, store)
 	if err != nil {
 		log.Fatalf("init rclone handler: %v", err)
 	}

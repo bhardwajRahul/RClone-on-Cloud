@@ -9,6 +9,8 @@ import (
 
 	sharedjwt "github.com/ekarton/RClone-Cloud/apps/web-api/shared/jwt"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/rclone/rclone/fs/config"
+	"github.com/rclone/rclone/fs/rc"
 )
 
 // GetClaims extracts claims from a request that passed through the bearer middleware.
@@ -25,8 +27,14 @@ type RCloneAPIHandler struct {
 	publicKey any
 }
 
-// NewRCloneAPIHandler prepares the JWT-protected RClone API handler.
-func NewRCloneAPIHandler(pubKeyPEM string) (*RCloneAPIHandler, error) {
+// NewRCloneAPIHandler prepares the JWT-protected RClone API handler
+// and initializes the global RClone system state.
+func NewRCloneAPIHandler(pubKeyPEM string, store config.Storage) (*RCloneAPIHandler, error) {
+	// Initialize global rclone state
+	config.SetData(store)
+	rc.Opt.Enabled = true
+	rc.Opt.NoAuth = true
+
 	publicKey, err := sharedjwt.LoadPublicKey(pubKeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("load public key: %w", err)

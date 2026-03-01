@@ -2,8 +2,11 @@ package rclone
 
 import (
 	"bytes"
-	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,9 +43,16 @@ remote = %s
 	configfile.Install()
 	store := config.Data()
 
-	// 3. Initialize rclone
-	ctx := context.Background()
-	err = Initialize(ctx, store)
+	// 3. Initialize rclone via the API handler constructor
+	// Generate a valid public key PEM for the constructor
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	pubBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	require.NoError(t, err)
+	pemBlock := &pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes}
+	pubKeyPEM := string(pem.EncodeToMemory(pemBlock))
+
+	_, err = NewRCloneAPIHandler(pubKeyPEM, store)
 	require.NoError(t, err)
 
 	handler := NewRCHandler()

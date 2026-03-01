@@ -1,7 +1,6 @@
 package rclone
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -29,10 +28,6 @@ func TestRCloneAPIHandler(t *testing.T) {
 	_ = os.WriteFile(confPath, []byte("[testremote]\ntype = local\n"), 0600)
 	config.SetConfigPath(confPath)
 	configfile.Install()
-	if err := Initialize(context.Background(), config.Data()); err != nil {
-		t.Fatalf("failed to initialize rclone: %v", err)
-	}
-
 	// 2. Generate an RSA Keypair
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -47,7 +42,7 @@ func TestRCloneAPIHandler(t *testing.T) {
 	pubKeyPEM := string(pem.EncodeToMemory(pemBlock))
 
 	// 3. Initialize RCloneAPIHandler
-	handler, err := NewRCloneAPIHandler(pubKeyPEM)
+	handler, err := NewRCloneAPIHandler(pubKeyPEM, config.Data())
 	require.NoError(t, err)
 
 	// Register it with a test router
@@ -146,13 +141,13 @@ func TestRCloneAPIHandler(t *testing.T) {
 
 func TestNewRCloneAPIHandlerFailures(t *testing.T) {
 	t.Run("Empty Public Key String", func(t *testing.T) {
-		_, err := NewRCloneAPIHandler("")
+		_, err := NewRCloneAPIHandler("", config.Data())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "JWT_PUBLIC_KEY is not set")
 	})
 
 	t.Run("Invalid PEM Data", func(t *testing.T) {
-		_, err := NewRCloneAPIHandler("NOT A PEM")
+		_, err := NewRCloneAPIHandler("NOT A PEM", config.Data())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "public key is not valid PEM")
 	})
@@ -164,7 +159,7 @@ func TestNewRCloneAPIHandlerFailures(t *testing.T) {
 		}
 		pemStr := string(pem.EncodeToMemory(pemBlock))
 
-		_, err := NewRCloneAPIHandler(pemStr)
+		_, err := NewRCloneAPIHandler(pemStr, config.Data())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parse public key")
 	})

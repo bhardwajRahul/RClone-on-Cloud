@@ -14,6 +14,10 @@ import (
 	"github.com/rclone/rclone/fs/rc"
 	"github.com/rclone/rclone/fs/rc/jobs"
 	"github.com/rclone/rclone/lib/http/serve"
+
+	// Side-effect imports to register RC methods and backends
+	_ "github.com/rclone/rclone/backend/all"
+	_ "github.com/rclone/rclone/fs/operations"
 )
 
 var fsMatch = regexp.MustCompile(`^\[(.*?)\](.*)$`)
