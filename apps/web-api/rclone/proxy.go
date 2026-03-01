@@ -13,15 +13,6 @@ import (
 	"github.com/rclone/rclone/fs/rc"
 )
 
-// GetClaims extracts claims from a request that passed through the bearer middleware.
-// This is now a wrapper around sharedjwt.GetClaims for backward compatibility if needed,
-// but we should eventually update callers to use sharedjwt.GetClaims directly.
-func GetClaims(r *http.Request) *sharedjwt.Claims {
-	return sharedjwt.GetClaims(r)
-}
-
-// --- Handler ---
-
 // RCloneAPIHandler owns the JWT-protected RClone API.
 type RCloneAPIHandler struct {
 	publicKey any
