@@ -38,7 +38,7 @@ USER appuser
 COPY --from=builder /app/rclone-cloud-web-api .
 
 # Expose the API port
-EXPOSE 8080
+EXPOSE 9000
 
 # Run the binary
 # Using exec form for better signal handling

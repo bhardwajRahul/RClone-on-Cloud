@@ -46,7 +46,7 @@ AUTH_JWT_PRIVATE_KEY=<Your JWT private key (Raw PEM string)>
 AUTH_GOOGLE_CLIENT_ID=<Your Google client ID>
 AUTH_GOOGLE_CLIENT_SECRET=123
 AUTH_GOOGLE_REDIRECT_URL=http://localhost:3000/auth/v1/google/callback
-LISTEN_ADDR=:8080
+LISTEN_ADDR=:9000
 ```
 
 2. Install dependencies by running:
