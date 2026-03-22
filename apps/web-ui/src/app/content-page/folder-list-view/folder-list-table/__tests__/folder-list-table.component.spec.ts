@@ -3,13 +3,10 @@ import { provideRouter, Router } from '@angular/router';
 import { provideMockStore } from '@ngrx/store/testing';
 import { Buffer } from 'buffer';
 import { of } from 'rxjs';
+import { Mocked, vi } from 'vitest';
 
 import { authState } from '../../../../auth/store';
-import {
-  toFailure,
-  toPending,
-  toSuccess,
-} from '../../../../shared/results/results';
+import { toFailure, toPending, toSuccess } from '../../../../shared/results/results';
 import { ListFolderResponse } from '../../../services/web-api/types/list-folder';
 import { WebApiService } from '../../../services/web-api/web-api.service';
 import { REMOTE_PATH$ } from '../../folder-list-view.tokens';
@@ -25,10 +22,12 @@ const ITEM_DETAILS = {
 };
 
 describe('FolderListTableComponent', () => {
-  let mockWebApiService: jasmine.SpyObj<WebApiService>;
+  let mockWebApiService: Mocked<WebApiService>;
 
   beforeEach(async () => {
-    mockWebApiService = jasmine.createSpyObj('WebApiService', ['listFolder']);
+    mockWebApiService = {
+      listFolder: vi.fn(),
+    } as unknown as Mocked<WebApiService>;
 
     await TestBed.configureTestingModule({
       imports: [FolderListTableComponent],
@@ -53,17 +52,12 @@ describe('FolderListTableComponent', () => {
 
   it('should render skeleton when items are not loaded yet', () => {
     const fixture = TestBed.createComponent(FolderListTableComponent);
-    fixture.componentRef.setInput(
-      'contentsResult',
-      toPending<ListFolderResponse>(),
-    );
+    fixture.componentRef.setInput('contentsResult', toPending<ListFolderResponse>());
     fixture.detectChanges();
 
     expect(
-      fixture.nativeElement.querySelectorAll(
-        '[data-testid="table-row-skeleton"]',
-      ).length,
-    ).toEqual(10);
+      fixture.nativeElement.querySelectorAll('[data-testid="table-row-skeleton"]').length,
+    ).toBe(10);
   });
 
   it('should show error when items has failed to load', () => {
@@ -74,9 +68,7 @@ describe('FolderListTableComponent', () => {
     );
     fixture.detectChanges();
 
-    expect(
-      fixture.nativeElement.querySelector('[data-testid="table-row-error"]'),
-    ).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="table-row-error"]')).toBeTruthy();
   });
 
   it('should render correctly when items are loaded', () => {
@@ -89,10 +81,7 @@ describe('FolderListTableComponent', () => {
     );
     fixture.detectChanges();
 
-    expect(
-      fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]')
-        .length,
-    ).toEqual(2);
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]').length).toBe(2);
   });
 
   it('should toggle sort when header is clicked', () => {
@@ -111,9 +100,7 @@ describe('FolderListTableComponent', () => {
 
     // Default sort: Folders first, then name ASC
     // Order should be C, A, B
-    let rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    let rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('C');
     expect(rows[1].textContent).toContain('A');
     expect(rows[2].textContent).toContain('B');
@@ -125,9 +112,7 @@ describe('FolderListTableComponent', () => {
 
     // Now sorted by name ASC (folders still first)
     // Order: C, A, B
-    rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('C');
     expect(rows[1].textContent).toContain('A');
     expect(rows[2].textContent).toContain('B');
@@ -137,9 +122,7 @@ describe('FolderListTableComponent', () => {
     fixture.detectChanges();
 
     // Order: C (folder), B, A
-    rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('C');
     expect(rows[1].textContent).toContain('B');
     expect(rows[2].textContent).toContain('A');
@@ -163,9 +146,7 @@ describe('FolderListTableComponent', () => {
     sizeHeader.click(); // ASC
     fixture.detectChanges();
 
-    let rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    let rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('Dir');
     expect(rows[1].textContent).toContain('Small');
     expect(rows[2].textContent).toContain('Large');
@@ -173,9 +154,7 @@ describe('FolderListTableComponent', () => {
     sizeHeader.click(); // DESC
     fixture.detectChanges();
 
-    rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('Dir');
     expect(rows[1].textContent).toContain('Large');
     expect(rows[2].textContent).toContain('Small');
@@ -202,9 +181,7 @@ describe('FolderListTableComponent', () => {
     dateHeader.click(); // ASC
     fixture.detectChanges();
 
-    let rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    let rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('Dir');
     expect(rows[1].textContent).toContain('Old');
     expect(rows[2].textContent).toContain('New');
@@ -212,9 +189,7 @@ describe('FolderListTableComponent', () => {
     dateHeader.click(); // DESC
     fixture.detectChanges();
 
-    rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('Dir');
     expect(rows[1].textContent).toContain('New');
     expect(rows[2].textContent).toContain('Old');
@@ -248,9 +223,7 @@ describe('FolderListTableComponent', () => {
     typeHeader.click(); // ASC
     fixture.detectChanges();
 
-    let rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    let rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('Dir');
     expect(rows[1].textContent).toContain('Image');
     expect(rows[2].textContent).toContain('Text');
@@ -258,9 +231,7 @@ describe('FolderListTableComponent', () => {
     typeHeader.click(); // DESC
     fixture.detectChanges();
 
-    rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('Dir');
     expect(rows[1].textContent).toContain('Text');
     expect(rows[2].textContent).toContain('Image');
@@ -296,31 +267,25 @@ describe('FolderListTableComponent', () => {
     const sizeHeader = fixture.nativeElement.querySelectorAll('th')[2];
     sizeHeader.click(); // size ASC
     fixture.detectChanges();
-    let rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    let rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('B'); // 0 vs 100
 
     const dateHeader = fixture.nativeElement.querySelectorAll('th')[1];
     dateHeader.click(); // lastModified ASC
     fixture.detectChanges();
-    rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('B'); // 0 vs Date
 
     const typeHeader = fixture.nativeElement.querySelectorAll('th')[3];
     typeHeader.click(); // mimeType ASC
     fixture.detectChanges();
-    rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('B'); // '' vs 'a'
   });
 
   it('should navigate when clicking a directory', () => {
     const router = TestBed.inject(Router);
-    spyOn(router, 'navigate');
+    vi.spyOn(router, 'navigate');
 
     const fixture = TestBed.createComponent(FolderListTableComponent);
     fixture.componentRef.setInput(
@@ -331,9 +296,7 @@ describe('FolderListTableComponent', () => {
     );
     fixture.detectChanges();
 
-    const row = fixture.nativeElement.querySelector(
-      '[data-testid="table-row-item"]',
-    );
+    const row = fixture.nativeElement.querySelector('[data-testid="table-row-item"]');
     row.click();
 
     expect(router.navigate).toHaveBeenCalledWith([
@@ -344,7 +307,7 @@ describe('FolderListTableComponent', () => {
 
   it('should NOT navigate when clicking a file', () => {
     const router = TestBed.inject(Router);
-    spyOn(router, 'navigate');
+    vi.spyOn(router, 'navigate');
 
     const fixture = TestBed.createComponent(FolderListTableComponent);
     fixture.componentRef.setInput(
@@ -355,9 +318,7 @@ describe('FolderListTableComponent', () => {
     );
     fixture.detectChanges();
 
-    const row = fixture.nativeElement.querySelector(
-      '[data-testid="table-row-item"]',
-    );
+    const row = fixture.nativeElement.querySelector('[data-testid="table-row-item"]');
     row.click();
 
     expect(router.navigate).not.toHaveBeenCalled();
@@ -371,9 +332,7 @@ describe('FolderListTableComponent', () => {
     fixture.componentRef.setInput('contentsResult', result);
     fixture.detectChanges();
 
-    expect(
-      fixture.nativeElement.querySelector('[data-testid="table-row-skeleton"]'),
-    ).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="table-row-skeleton"]')).toBeTruthy();
   });
 
   it('should format data correctly', () => {
@@ -387,9 +346,7 @@ describe('FolderListTableComponent', () => {
     );
     fixture.detectChanges();
 
-    const rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows[0].textContent).toContain('1 kB');
     expect(rows[0].textContent).toContain(modTime.toDateString());
   });
@@ -411,9 +368,7 @@ describe('FolderListTableComponent', () => {
     nameHeader.click(); // ASC
     fixture.detectChanges();
 
-    const rows = fixture.nativeElement.querySelectorAll(
-      '[data-testid="table-row-item"]',
-    );
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="table-row-item"]');
     expect(rows.length).toBe(2);
     expect(rows[0].textContent).toContain('A');
     expect(rows[1].textContent).toContain('A');

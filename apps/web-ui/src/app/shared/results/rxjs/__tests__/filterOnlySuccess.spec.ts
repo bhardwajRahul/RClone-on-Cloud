@@ -1,10 +1,10 @@
-import { of } from 'rxjs';
+import { firstValueFrom, of, toArray } from 'rxjs';
 
 import { Result, toFailure, toPending, toSuccess } from '../../results';
 import { filterOnlySuccess } from '../filterOnlySuccess';
 
 describe('filterOnlySuccess', () => {
-  it('should emit only successful results', (done) => {
+  it('should emit only successful results', async () => {
     const source$ = of(
       toSuccess(1),
       toPending<number>(),
@@ -12,67 +12,37 @@ describe('filterOnlySuccess', () => {
       toSuccess(2),
     );
 
-    const result: number[] = [];
-    source$.pipe(filterOnlySuccess()).subscribe(
-      (value) => result.push(value),
-      null,
-      () => {
-        expect(result).toEqual([1, 2]);
-        done();
-      },
-    );
+    const result = await firstValueFrom(source$.pipe(filterOnlySuccess(), toArray()));
+    expect(result).toEqual([1, 2]);
   });
 
-  it('should emit nothing if there are no successful results', (done) => {
-    const source$ = of(
-      toPending<number>(),
-      toFailure<number>(new Error('Error')),
-    );
+  it('should emit nothing if there are no successful results', async () => {
+    const source$ = of(toPending<number>(), toFailure<number>(new Error('Error')));
 
-    const result: number[] = [];
-    source$.pipe(filterOnlySuccess()).subscribe(
-      (value) => result.push(value),
-      null,
-      () => {
-        expect(result).toEqual([]);
-        done();
-      },
-    );
+    const result = await firstValueFrom(source$.pipe(filterOnlySuccess(), toArray()), {
+      defaultValue: [],
+    });
+    expect(result).toEqual([]);
   });
 
-  it('should handle an empty observable', (done) => {
+  it('should handle an empty observable', async () => {
     const source$ = of<Result<number>>();
 
-    const result: number[] = [];
-    source$.pipe(filterOnlySuccess()).subscribe(
-      (value) => result.push(value),
-      null,
-      () => {
-        expect(result).toEqual([]);
-        done();
-      },
-    );
+    const result = await firstValueFrom(source$.pipe(filterOnlySuccess(), toArray()), {
+      defaultValue: [],
+    });
+    expect(result).toEqual([]);
   });
 
-  it('should work with complex data types', (done) => {
+  it('should work with complex data types', async () => {
     interface ComplexData {
       id: number;
       name: string;
     }
     const complexData: ComplexData = { id: 1, name: 'Test' };
-    const source$ = of(
-      toSuccess(complexData),
-      toFailure<ComplexData>(new Error('Error')),
-    );
+    const source$ = of(toSuccess(complexData), toFailure<ComplexData>(new Error('Error')));
 
-    const result: (typeof complexData)[] = [];
-    source$.pipe(filterOnlySuccess()).subscribe(
-      (value) => result.push(value),
-      null,
-      () => {
-        expect(result).toEqual([complexData]);
-        done();
-      },
-    );
+    const result = await firstValueFrom(source$.pipe(filterOnlySuccess(), toArray()));
+    expect(result).toEqual([complexData]);
   });
 });

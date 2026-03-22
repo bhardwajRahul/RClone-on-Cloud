@@ -1,13 +1,7 @@
-import {
-  HttpClient,
-  provideHttpClient,
-  withInterceptors,
-} from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { Mock, vi } from 'vitest';
 
 import { environment } from '../../../../environments/environment';
 import { WINDOW } from '../../../app.tokens';
@@ -17,14 +11,14 @@ describe('webApiAuthRequestInterceptor', () => {
   let httpClient: HttpClient;
   let httpMock: HttpTestingController;
   let windowMock: {
-    localStorage: { setItem: jasmine.Spy };
+    localStorage: { setItem: Mock };
     location: { href: string; pathname: string };
   };
 
   beforeEach(() => {
     windowMock = {
       localStorage: {
-        setItem: jasmine.createSpy('setItem'),
+        setItem: vi.fn(),
       },
       location: {
         href: '',
@@ -49,57 +43,51 @@ describe('webApiAuthRequestInterceptor', () => {
     httpMock.verify();
   });
 
-  it('should redirect to login page and save path to local storage when web api request returns 401 error', (done) => {
+  it('should redirect to login page and save path to local storage when web api request returns 401 error', async () => {
     const testUrl = `${environment.webApiEndpoint}/test`;
 
-    httpClient.get(testUrl).subscribe({
-      next: () => fail('Should not have succeeded'),
-      error: () => fail('Should not have failed'),
-      complete: () => {
-        expect(windowMock.location.href).toBe(environment.loginUrl);
-        expect(windowMock.localStorage.setItem).toHaveBeenCalledWith(
-          'auth_redirect_path',
-          '/content/home',
-        );
-        done();
-      },
+    const promise = new Promise<void>((resolve) => {
+      httpClient.get(testUrl).subscribe({
+        complete: () => {
+          expect(windowMock.location.href).toBe(environment.loginUrl);
+          expect(windowMock.localStorage.setItem).toHaveBeenCalledWith(
+            'auth_redirect_path',
+            '/content/home',
+          );
+          resolve();
+        },
+      });
     });
 
-    httpMock
-      .expectOne(testUrl)
-      .flush('', { status: 401, statusText: 'Unauthorized' });
+    httpMock.expectOne(testUrl).flush('', { status: 401, statusText: 'Unauthorized' });
+
+    await promise;
   });
 
   it('should not redirect on 401 error for non-web api requests', () => {
     const testUrl = 'https://example.com/api';
 
     httpClient.get(testUrl).subscribe({
-      next: () => fail('should have failed with 401 error'),
       error: (error) => {
         expect(error.status).toBe(401);
         expect(windowMock.location.href).not.toBe(environment.loginUrl);
       },
     });
 
-    httpMock
-      .expectOne(testUrl)
-      .flush('', { status: 401, statusText: 'Unauthorized' });
+    httpMock.expectOne(testUrl).flush('', { status: 401, statusText: 'Unauthorized' });
   });
 
   it('should pass through non-401 errors', () => {
     const testUrl = `${environment.webApiEndpoint}/test`;
 
     httpClient.get(testUrl).subscribe({
-      next: () => fail('should have failed with 500 error'),
       error: (error) => {
         expect(error.status).toBe(500);
         expect(windowMock.location.href).not.toBe(environment.loginUrl);
       },
     });
 
-    httpMock
-      .expectOne(testUrl)
-      .flush('', { status: 500, statusText: 'Internal Server Error' });
+    httpMock.expectOne(testUrl).flush('', { status: 500, statusText: 'Internal Server Error' });
   });
 
   it('should pass through successful requests', () => {
