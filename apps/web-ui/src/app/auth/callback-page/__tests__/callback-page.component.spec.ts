@@ -5,13 +5,16 @@ import { Map as ImmutableMap } from 'immutable';
 import { of } from 'rxjs';
 
 import { WINDOW } from '../../../app.tokens';
-import { authState } from '../../store';
+import { toFailure, toSuccess } from '../../../shared/results/results';
+import { TokenResponse, WebApiService } from '../../services/webapi.service';
+import { authActions } from '../../store';
 import { CallbackPageComponent } from '../callback-page.component';
 
 describe('CallbackPageComponent', () => {
   let fixture: ComponentFixture<CallbackPageComponent>;
   let store: MockStore;
   let router: jasmine.SpyObj<Router>;
+  let webApiService: jasmine.SpyObj<WebApiService>;
   let mockLocalStorageGetItem: jasmine.Spy;
 
   beforeEach(() => {
@@ -20,20 +23,20 @@ describe('CallbackPageComponent', () => {
       .and.returnValue(null);
 
     router = jasmine.createSpyObj('Router', ['navigate']);
+    webApiService = jasmine.createSpyObj('WebApiService', ['fetchAccessToken']);
 
     TestBed.configureTestingModule({
       imports: [CallbackPageComponent],
       providers: [
         { provide: Router, useValue: router },
+        { provide: WebApiService, useValue: webApiService },
         {
           provide: ActivatedRoute,
           useValue: {
             queryParamMap: of(ImmutableMap().set('code', 'test-auth-code')),
           },
         },
-        provideMockStore({
-          selectors: [{ selector: authState.selectAuthToken, value: '' }],
-        }),
+        provideMockStore(),
         {
           provide: WINDOW,
           useValue: {
@@ -45,38 +48,48 @@ describe('CallbackPageComponent', () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(CallbackPageComponent);
-    fixture.detectChanges();
-
     store = TestBed.inject(MockStore);
     spyOn(store, 'dispatch');
+    fixture = TestBed.createComponent(CallbackPageComponent);
   });
 
-  it('should navigate to redirect path when auth token is available', () => {
-    store.overrideSelector(authState.selectAuthToken, 'mockAccessToken');
+  it('should fetch token and navigate to redirect path on success', () => {
+    const mockToken = 'mockToken';
+    webApiService.fetchAccessToken.and.returnValue(
+      of(toSuccess({ token: mockToken })),
+    );
 
-    store.refreshState();
-    fixture.detectChanges();
+    fixture.detectChanges(); // Trigger ngOnInit
 
-    expect(router.navigate).toHaveBeenCalledWith(['/content/remotes']);
+    expect(webApiService.fetchAccessToken).toHaveBeenCalledWith(
+      'test-auth-code',
+    );
+    expect(store.dispatch).toHaveBeenCalledWith(
+      authActions.setAuthToken({ authToken: mockToken }),
+    );
+    expect(router.navigate).toHaveBeenCalledWith(['/remotes']);
   });
 
   it('should navigate to custom redirect path if set in localStorage', () => {
-    store.overrideSelector(authState.selectAuthToken, 'mockAccessToken');
+    const mockToken = 'mockToken';
+    webApiService.fetchAccessToken.and.returnValue(
+      of(toSuccess({ token: mockToken })),
+    );
     mockLocalStorageGetItem.and.returnValue('/custom/path');
 
-    store.refreshState();
-    fixture.detectChanges();
+    fixture.detectChanges(); // Trigger ngOnInit
 
     expect(router.navigate).toHaveBeenCalledWith(['/custom/path']);
   });
 
-  it('should not navigate if auth token is empty', () => {
-    store.overrideSelector(authState.selectAuthToken, '');
+  it('should not navigate or dispatch if token fetch has failed', () => {
+    webApiService.fetchAccessToken.and.returnValue(
+      of(toFailure<TokenResponse>(new Error('error'))),
+    );
 
-    store.refreshState();
-    fixture.detectChanges();
+    fixture.detectChanges(); // Trigger ngOnInit
 
+    expect(store.dispatch).not.toHaveBeenCalled();
     expect(router.navigate).not.toHaveBeenCalled();
   });
 });

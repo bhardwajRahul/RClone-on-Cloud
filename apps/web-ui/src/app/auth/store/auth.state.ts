@@ -16,20 +16,8 @@ export const FEATURE_KEY = 'Auth';
 /** Returns the entire state of the auth store */
 export const selectAuthState = createFeatureSelector<AuthState>(FEATURE_KEY);
 
-/** Returns the auth token. */
+/** Returns the auth token value as a string. */
 export const selectAuthToken = createSelector(
   selectAuthState,
   (state) => state.authToken,
-);
-
-/** Returns the user profile url. */
-export const selectUserProfileUrl = createSelector(
-  selectAuthState,
-  () => '',
-);
-
-/** Returns the mapbox api token. */
-export const selectMapboxApiToken = createSelector(
-  selectAuthState,
-  () => '',
 );

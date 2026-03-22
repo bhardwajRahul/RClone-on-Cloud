@@ -1,0 +1,112 @@
+<dialog #modal class="modal backdrop-blur-xl bg-white/70 dark:bg-gray-800/70">
+  @let fileDetails = fileDetailsResult();
+
+  <!-- Top bar -->
+  <div
+    class="flex justify-between items-center w-full absolute top-0 left-0 px-4 py-3 z-10"
+  >
+    <div class="text-sm font-medium truncate max-w-[60%]">
+      @if (fileDetails | hasSucceeded) {
+        <span data-testid="file-viewer-filename">
+          {{ fileDetails.data!.fileName }}
+        </span>
+      }
+    </div>
+
+    <div class="flex">
+      <!-- Download button -->
+      @if (fileDetails | hasSucceeded) {
+        <a
+          data-testid="file-viewer-download-button"
+          class="btn btn-ghost btn-circle p-2"
+          [href]="fileDetails.data!.blobUrl"
+          [download]="fileDetails.data!.fileName"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+            class="size-5"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"
+            />
+          </svg>
+        </a>
+      }
+
+      <!-- Close button -->
+      <button
+        data-testid="file-viewer-close-button"
+        class="btn btn-ghost btn-circle p-2"
+        (click)="closeDialog()"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+          class="size-5"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M6 18 18 6M6 6l12 12"
+          />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Content area -->
+  <div
+    class="modal-box bg-transparent shadow-none p-0 flex items-center justify-center max-w-none w-auto"
+  >
+    @if (fileDetails | isPending) {
+      <span class="loading loading-spinner loading-lg"></span>
+    } @else if (fileDetails | hasFailed) {
+      <div
+        class="bg-base-200 rounded-lg p-6 text-error"
+        data-testid="file-viewer-error"
+      >
+        Error loading file: {{ fileDetails.error!.message }}
+      </div>
+    } @else {
+      @if (fileDetails.data!.mimeType.startsWith('image/')) {
+        <app-image-viewer [blobUrl]="fileDetails.data!.blobUrl" />
+      } @else if (fileDetails.data!.mimeType.startsWith('video/')) {
+        <app-video-viewer [blobUrl]="fileDetails.data!.blobUrl" />
+      } @else if (fileDetails.data!.mimeType.startsWith('audio/')) {
+        <app-audio-viewer [blobUrl]="fileDetails.data!.blobUrl" />
+      } @else if (fileDetails.data!.mimeType === 'application/pdf') {
+        <app-pdf-viewer [blobUrl]="fileDetails.data!.blobUrl" />
+      } @else if (
+        fileDetails.data!.mimeType.startsWith('text/') ||
+        fileDetails.data!.mimeType === 'application/json' ||
+        fileDetails.data!.mimeType === 'application/xml' ||
+        fileDetails.data!.mimeType === 'application/javascript'
+      ) {
+        <app-text-viewer [blob]="fileDetails.data!.blob" />
+      } @else {
+        <app-unsupported-viewer
+          [fileName]="fileDetails.data!.fileName"
+          [blobUrl]="fileDetails.data!.blobUrl"
+        />
+      }
+    }
+  </div>
+
+  <form
+    method="dialog"
+    class="modal-backdrop"
+    (click)="closeDialog()"
+    (keydown.enter)="closeDialog()"
+  >
+    <button (click)="closeDialog()">close</button>
+  </form>
+</dialog>

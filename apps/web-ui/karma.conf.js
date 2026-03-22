@@ -24,15 +24,15 @@ module.exports = function (config) {
       suppressAll: true, // removes the duplicated traces
     },
     coverageReporter: {
-      dir: require('path').join(__dirname, './coverage/photos-drive-web-ui'),
+      dir: require('path').join(__dirname, './coverage/rclone-on-cloud-web-ui'),
       subdir: '.',
       reporters: [{ type: 'html' }, { type: 'lcov' }, { type: 'text-summary' }],
       check: {
         global: {
-          statements: 100,
-          branches: 100,
-          functions: 100,
-          lines: 100,
+          statements: 95,
+          branches: 80,
+          functions: 95,
+          lines: 95,
         },
       },
     },

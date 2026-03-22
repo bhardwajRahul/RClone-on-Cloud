@@ -7,9 +7,10 @@ import { AuthState, buildInitialState, FEATURE_KEY } from './auth.state';
 export const authReducer = createReducer(
   buildInitialState(),
 
-  on(authActions.loadAuthResult, (state, { result }): AuthState => {
+  on(authActions.setAuthToken, (state, { authToken }): AuthState => {
     return {
-      authToken: result.data?.token ?? '',
+      ...state,
+      authToken,
     };
   }),
 );
