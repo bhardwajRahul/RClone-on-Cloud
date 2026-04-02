@@ -334,14 +334,18 @@ func (s *MongoStorage) processChangeStream(ctx context.Context, cs *mongo.Change
 			FullDocument bson.M `bson:"fullDocument"`
 		}
 		if err := cs.Decode(&event); err != nil {
-			log.Printf("change stream: decode: %v", err)
+			log.Fatalln("change stream decode error: ", err)
 			continue
 		}
 
+		log.Println("Received change event: ", event)
+
 		switch event.OperationType {
 		case "insert", "update", "replace":
+			log.Println("Mongo config section updated: ", event.OperationType, event.DocumentKey.ID)
 			s.applyFullDocument(event.DocumentKey.ID, event.FullDocument)
 		case "delete":
+			log.Println("Mongo config section deleted: ", event.OperationType, event.DocumentKey.ID)
 			s.mu.Lock()
 			delete(s.data, event.DocumentKey.ID)
 			s.mu.Unlock()
@@ -349,7 +353,7 @@ func (s *MongoStorage) processChangeStream(ctx context.Context, cs *mongo.Change
 	}
 	// cs.Next returns false when the context is cancelled or an error occurs.
 	if err := cs.Err(); err != nil && ctx.Err() == nil {
-		log.Printf("change stream: cursor: %v", err)
+		log.Fatalln("change stream: cursor: ", err)
 	}
 }
 
