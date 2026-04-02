@@ -1,62 +1,180 @@
-# ☁️ RClone-on-Cloud
+# RClone-on-Cloud
 
-**RClone-on-Cloud** transforms the popular [rclone](https://rclone.org/) utility into a secure, scalable, and stateless web service. It provides a restricted API gateway that proxies Remote Control (`rc`) operations, securing your remote configurations in a MongoDB database rather than relying on local files.
+### Description
 
-This repository is structured as a monorepo containing two core applications:
+The **RClone-on-Cloud** project aims to provide a secure, scalable, and stateless web service for [rclone](https://rclone.org/). It stores the rclone configuration files in a secure, centralized MongoDB storage, encrypted with AES-256-GCM and authenticated with a Google OAuth2 + JWT gateway.
 
-1. **[Web API (`apps/web-api`)](./apps/web-api/README.md)**: The core REST API that exposes the secure rclone interface.
-2. **[Web UI (`apps/web-ui`)](./apps/web-ui/README.md)**: The Angular frontend that provides a user-friendly interface to browse remotes and view files.
-3. **[CLI Client (`apps/cli`)](./apps/cli/README.md)**: A command-line companion tool to help synchronize, migrate, and manage your configurations between your local machine and your MongoDB database.
+The RClone-on-Cloud project is a full stack web development project. It is comprised of several components: the **Web API**, **Web UI**, and the **CLI Client**.
 
----
+### Table of Contents
 
-## 🏗️ Architecture & Security Model
+- [Walkthrough](./README.md#walkthrough-of-this-project)
+- [Installation](./README.md#installation)
+- [Usage](./README.md#usage)
+- [Credits](./README.md#credits)
+- [License](./README.md#license)
 
-Running `rclone` in the cloud securely presents two major challenges: securing the Remote Control endpoints against abuse, and protecting the plaintext remote secrets (passwords, tokens, API keys) normally stored in `rclone.conf`.
+### Walkthrough of this project
 
-RClone-on-Cloud solves this by:
+This project consists of several components, each responsible for performing a certain task to manage your cloud configurations securely. The diagram below illustrates the system architecture of the project.
 
-- **1. Centralized MongoDB Configuration (Encrypted-at-Rest)**
-  The applications bypass the local filesystem entirely. Rclone configurations are dynamically pulled from a MongoDB collection. Before any configuration is written to the database, it is encrypted locally using **AES-256-GCM** with a symmetric key (`RCLONE_ENCRYPTION_KEY`). This ensures your credentials are never stored in plaintext.
+```mermaid
+graph LR
+    subgraph "User's Terminal"
+        CLI[CLI Client]
+    end
 
-- **2. Google OAuth2 + JWT Gateway**
-  The Web API requires users to authenticate via **Google OAuth2**. It enforces a strict allowlist of authorized Google Account Subject IDs. If an authorized user logs in, the API issues a short-lived, **Asymmetrically Signed JWT** (RSA/Ed25519) that must be passed as a Bearer token to access the rclone endpoints.
+    subgraph "Cloud / Storage"
+        MongoDB[(RClone Encrypted Configs \nin MongoDB)]
+    end
 
-- **3. Restricted Operation Allowlist**
-  The Web API does not expose the entire `rclone rc` surface area. It acts as an active proxy, explicitly blocking any administrative or dangerous core commands (e.g., `core/version`, `fscache/clear`) and only forwarding known safe data-transfer commands (`sync/copy`, `operations/deletefile`, etc.).
+    subgraph "Cloud / Web"
+        WebAPI[Web API]
+    end
 
----
+    subgraph "User's Browser"
+        WebUI[Web UI]
+    end
 
-## 📂 Project Structure
+    WebUI -->|"Makes \nHTTP requests"| WebAPI
 
-```text
-.
-├── apps/
-│   ├── cli/       # Go 1.25 Cobra CLI (Migrate & Dump Configs to MongoDB)
-│   ├── web-api/   # Go 1.25 REST API (Rclone RC Proxy, Google OAuth2, JWTs)
-│   └── web-ui/    # Angular Web UI (Frontend for browsing remotes and files)
-├── .github/
-│   └── workflows/ # Automated CI/CD (Linting, Tests, Docker Builds)
-└── README.md
+    WebAPI <-->|"Fetches, updates, and watches config changes from DB"| MongoDB
+
+    CLI <-->|"Fetches, updates, and watches config changes from DB"| MongoDB
 ```
 
-*(Note: The `apps/cli` application explicitly consumes the `apps/web-api` module to reuse the MongoDB config and encryption storage layers.)*
+Users can use the front-end web application to browse their cloud files from their remotes directly from their browser.
 
----
+<div width="100%">
+    <p align="center">
+<img src="./apps/web-ui/public/assets/home-page/contents-table-view.png" width="600px"/>
+    </p>
+</div>
 
-## 🛠️ Continuous Integration (CI/CD)
+The application includes a file viewers to easily preview your content stored on the cloud.
 
-This repository enforces strict code quality and build verification through GitHub Actions:
-- **Build Checks**: Both applications are built on every push and PR using `go build ./...`
-- **Linting**: Automated linting via [`golangci-lint`](https://golangci-lint.run/).
-- **Testing (`testcontainers-go`)**: The test suites for both apps automatically spin up ephemeral Dockerized MongoDB instances (`mongo:7.0`) to run integration and unit tests (`go test -v -race ./...`).
-- **Docker Verification**: Verifies the production `Dockerfile` builds successfully.
+<div width="100%">
+    <p align="center">
+    <img src="./apps/web-ui/public/assets/home-page/pdf-viewer.png"  width="600px"/>
+    </p>
+</div>
 
----
+Users can also modify content in the cloud, such as uploading new content, renaming files / directories, moving files / directories, and deleting files / directories.
 
-## 📖 Getting Started
+<div width="100%">
+    <p align="center">
+    <img src="./apps/web-ui/public/assets/home-page/modify-content.png"  width="600px"/>
+    </p>
+</div>
 
-To get started, head over to the documentation for each application:
-- 👉 **[CLI Documentation](./apps/cli/README.md)** (Use this to upload your local `rclone.conf` to your database)
-- 👉 **[Web API Documentation](./apps/web-api/README.md)** (Start here to deploy your server)
-- 👉 **[Web UI Documentation](./apps/web-ui/README.md)** (Learn how to run the frontend application)
+It also provides a mobile-responsive interface for managing your files on the go.
+
+### Installation
+
+#### Required Programs and Tools:
+
+- Go 1.25+
+- Node.js & npm
+- MongoDB 7.0+ (Local or Atlas)
+
+#### Set up the database
+
+- Install MongoDB on your machine or use a MongoDB Atlas instance.
+- Ensure you have a valid connection string (e.g., `mongodb://localhost:27017`).
+- Generate a 32-character encryption key for the MongoDB configs and remember it.
+
+#### Set up the Web API:
+
+1. Set up your Google Cloud OAuth2 credentials [here](./apps/web-api/docs/setup_oauth2.md).
+2. Navigate to the `apps/web-api` directory.
+3. Generate an RSA or Ed25519 key pair for JWT signing and add the PEM strings to your `.env` (refer to the [Web API README](./apps/web-api/README.md) for details).
+4. Create a `.env` file to set the following environment variables:
+
+   ```env
+   RCLONE_CONFIG_MONGO_KEY=<your-mongo-key>
+   RCLONE_CONFIG_MONGO_URI=<your-mongo-uri>
+   AUTH_GOOGLE_CLIENT_ID=<your-google-oauth-client-id>
+   AUTH_GOOGLE_CLIENT_SECRET=<your-google-oauth-client-secret>
+   AUTH_ALLOWED_GOOGLE_IDS=<your-google-id>
+   AUTH_JWT_PRIVATE_KEY=<your-jwt-private-key>
+   AUTH_JWT_PUBLIC_KEY=<your-jwt-public-key>
+   ```
+
+5. Download dependencies and run the API:
+
+   ```bash
+   go mod download
+   go run .
+   ```
+
+#### Set up the Web UI:
+
+1. Navigate to the `apps/web-ui` directory.
+2. Install the project's dependencies:
+
+   ```bash
+   npm install
+   ```
+
+3. Create a `.env` file to store your API endpoints:
+
+   ```text
+   NG_APP_LOGIN_URL=http://localhost:3000/auth/v1/google
+   NG_APP_WEB_API_ENDPOINT=http://localhost:3000
+   ```
+
+4. Run the development server:
+
+   ```bash
+   npm run dev
+   ```
+
+#### Set up the CLI:
+
+1. Navigate to the `apps/cli` directory.
+2. Build the binary locally:
+
+   ```bash
+   go build -o rclone-cloud .
+   ```
+
+3. Set your environment variables (`MONGO_URL` and `MONGO_KEY`) to match those used by the Web API:
+
+   ```bash
+   export MONGO_URL="<your-mongo-url>"
+   export MONGO_KEY="<your-mongo-key>"
+   ```
+
+4. Migrate your existing `rclone.conf` to the MongoDB storage by running:
+
+   ```bash
+   ./rclone-cloud migrate --from-file <path/to/rclone.conf>
+   ```
+
+5. Now, you can run any RClone command such as:
+
+   ```bash
+   ./rclone-cloud listremotes
+   ./rclone-cloud config
+   ./rclone-cloud lsd <remote>:
+   ./rclone-cloud ls <remote>:
+   ./rclone-cloud sync . <remote>:Documents
+   ./rclone-cloud copy file.txt <remote>:
+   ...
+   ```
+
+   You can find more available commands at https://rclone.org/commands.
+
+- Note: each time the configs change in MongoDB, the CLI and the Web API automatically picks up the new changes.
+
+### Usage
+
+Please note that this project is used for educational purposes and is not intended to be used commercially. We are not liable for any damages/changes done by this project.
+
+### Credits
+
+Emilio Kartono, who made the entire project.
+
+### License
+
+This project is protected under the GNU licence. Please refer to the [LICENSE](./LICENSE) for more information.
