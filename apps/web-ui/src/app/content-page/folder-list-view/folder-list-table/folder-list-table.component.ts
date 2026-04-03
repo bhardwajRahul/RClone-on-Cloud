@@ -12,9 +12,14 @@ import { HasFailedPipe } from '../../../shared/results/pipes/has-failed.pipe';
 import { IsPendingPipe } from '../../../shared/results/pipes/is-pending.pipe';
 import { hasSucceed, Result, toPending, toSuccess } from '../../../shared/results/results';
 import { FileViewerRequest } from '../../file-viewer/file-viewer.request';
-import { ListFolderResponse } from '../../services/web-api/types/list-folder';
+import { ListFolderItem, ListFolderResponse } from '../../services/web-api/types/list-folder';
 import { dialogsActions } from '../../store/dialogs';
 import { REMOTE_PATH$ } from '../folder-list-view.tokens';
+import { NoContentMessageComponent } from '../no-content-message/no-content-message.component';
+import { MoveItemsDialogRequest } from '../move-items-dialog/move-items-dialog.request';
+import { DeleteItemsDialogRequest } from '../delete-items-dialog/delete-items-dialog.request';
+import { RenameItemsDialogRequest } from '../rename-items-dialog/rename-items-dialog.request';
+import { CopyItemsDialogRequest } from '../copy-items-dialog/copy-items-dialog.request';
 
 export type SortField = 'name' | 'lastModified' | 'size' | 'mimeType';
 export type SortDirection = 'asc' | 'desc';
@@ -24,19 +29,23 @@ export interface SortConfig {
   direction: SortDirection;
 }
 
-interface Item {
-  name: string;
-  mimeType: string;
-  size: string | undefined;
-  lastModified: string | undefined;
-  isDir: boolean;
+interface Item extends ListFolderItem {
+  prettySize: string | undefined;
+  prettyLastModified: string | undefined;
   onClick: () => void;
 }
 
 @Component({
   standalone: true,
   selector: 'app-folder-list-table',
-  imports: [CommonModule, RouterModule, HasFailedPipe, IsPendingPipe, RangePipe],
+  imports: [
+    CommonModule,
+    RouterModule,
+    HasFailedPipe,
+    IsPendingPipe,
+    RangePipe,
+    NoContentMessageComponent,
+  ],
   templateUrl: './folder-list-table.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -124,11 +133,9 @@ export class FolderListTableComponent {
 
     const mappedItems: Item[] = items.map((item) => {
       return {
-        name: item.name,
-        mimeType: item.mimeType ?? '',
-        size: item.size ? prettyBytes(item.size) : undefined,
-        lastModified: item.modTime?.toDateString() ?? undefined,
-        isDir: item.isDir,
+        ...item,
+        prettySize: item.size ? prettyBytes(item.size) : undefined,
+        prettyLastModified: item.modTime?.toDateString() ?? undefined,
         onClick: () => {
           if (item.isDir) {
             this.router.navigate([
@@ -164,5 +171,37 @@ export class FolderListTableComponent {
       }
       return { field, direction: 'asc' };
     });
+  }
+
+  openMoveDialog(item: Item) {
+    this.store.dispatch(
+      dialogsActions.openDialog({
+        request: new MoveItemsDialogRequest(item),
+      }),
+    );
+  }
+
+  openCopyDialog(item: Item) {
+    this.store.dispatch(
+      dialogsActions.openDialog({
+        request: new CopyItemsDialogRequest(item),
+      }),
+    );
+  }
+
+  openRenameDialog(item: Item) {
+    this.store.dispatch(
+      dialogsActions.openDialog({
+        request: new RenameItemsDialogRequest(item),
+      }),
+    );
+  }
+
+  openDeleteDialog(item: Item) {
+    this.store.dispatch(
+      dialogsActions.openDialog({
+        request: new DeleteItemsDialogRequest(item),
+      }),
+    );
   }
 }

@@ -5,17 +5,18 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Store } from '@ngrx/store';
 import { Subscription } from 'rxjs';
 
-import { dialogsActions, dialogsState } from '../../../store/dialogs';
-import { jobsActions } from '../../../store/jobs';
-import { REMOTE_PATH$ } from '../../folder-list-view.tokens';
-import { MoveDialogRequest } from './move-dialog.request';
+import { dialogsActions, dialogsState } from '../../store/dialogs';
+import { jobsActions } from '../../store/jobs';
+import { REMOTE_PATH$ } from '../folder-list-view.tokens';
+import { CopyItemsDialogRequest } from './copy-items-dialog.request';
 
 @Component({
-  selector: 'app-move-dialog',
+  selector: 'app-copy-items-dialog',
+  standalone: true,
   imports: [CommonModule, FormsModule],
-  templateUrl: './move-dialog.component.html',
+  templateUrl: './copy-items-dialog.component.html',
 })
-export class MoveDialogComponent implements AfterViewInit {
+export class CopyItemsDialogComponent implements AfterViewInit {
   private readonly store = inject(Store);
   private readonly remotePath = toSignal(inject(REMOTE_PATH$));
   private readonly subscription = new Subscription();
@@ -23,7 +24,7 @@ export class MoveDialogComponent implements AfterViewInit {
   @ViewChild('modal') myModal?: ElementRef<HTMLDialogElement>;
 
   private readonly request$ = this.store.select(
-    dialogsState.selectTopDialogRequest(MoveDialogRequest),
+    dialogsState.selectTopDialogRequest(CopyItemsDialogRequest),
   );
   readonly request = toSignal(this.request$);
 
@@ -45,7 +46,7 @@ export class MoveDialogComponent implements AfterViewInit {
     );
   }
 
-  confirmMove() {
+  confirmCopy() {
     const request = this.request();
     const remotePath = this.remotePath();
 
@@ -61,11 +62,12 @@ export class MoveDialogComponent implements AfterViewInit {
       this.store.dispatch(
         jobsActions.submitJob({
           request: {
-            kind: 'move-folder',
+            kind: 'copy-folder',
             fromRemote: remotePath.remote,
             fromPath: request.item.path,
             toRemote: remotePath.remote,
             toPath: finalPath,
+            createEmptySrcDirs: false,
           },
         }),
       );
@@ -73,7 +75,7 @@ export class MoveDialogComponent implements AfterViewInit {
       this.store.dispatch(
         jobsActions.submitJob({
           request: {
-            kind: 'move-file',
+            kind: 'copy-file',
             fromRemote: remotePath.remote,
             fromPath: request.item.path,
             toRemote: remotePath.remote,

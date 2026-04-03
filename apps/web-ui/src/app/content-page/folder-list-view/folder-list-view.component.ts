@@ -33,9 +33,10 @@ import { FolderListViewStore } from './folder-list-view.store';
 import { Subscription } from 'rxjs';
 import { jobsState } from '../store/jobs';
 import { Store } from '@ngrx/store';
-import { DeleteDialogComponent } from './folder-item-actions-dropdown/delete-dialog/delete-dialog.component';
-import { RenameDialogComponent } from './folder-item-actions-dropdown/rename-dialog/rename-dialog.component';
-import { MoveDialogComponent } from './folder-item-actions-dropdown/move-dialog/move-dialog.component';
+import { DeleteItemsDialogComponent } from './delete-items-dialog/delete-items-dialog.component';
+import { RenameItemsDialogComponent } from './rename-items-dialog/rename-items-dialog.component';
+import { MoveItemsDialogComponent } from './move-items-dialog/move-items-dialog.component';
+import { CopyItemsDialogComponent } from './copy-items-dialog/copy-items-dialog.component';
 
 @Component({
   standalone: true,
@@ -49,9 +50,10 @@ import { MoveDialogComponent } from './folder-item-actions-dropdown/move-dialog/
     FolderListCardsComponent,
     FolderListTableComponent,
     AddItemsDropdownComponent,
-    DeleteDialogComponent,
-    RenameDialogComponent,
-    MoveDialogComponent,
+    DeleteItemsDialogComponent,
+    RenameItemsDialogComponent,
+    MoveItemsDialogComponent,
+    CopyItemsDialogComponent,
   ],
   templateUrl: './folder-list-view.component.html',
   providers: [REMOTE_PATH$_PROVIDER, FolderListViewStore],
