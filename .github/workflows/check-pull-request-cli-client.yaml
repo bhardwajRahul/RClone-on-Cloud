@@ -7,20 +7,22 @@ name: Check pull request on CLI Client
 on:
   push:
     branches: [main]
-    paths:
-      - "apps/cli/**"
-      - ".github/workflows/check-pull-request-cli-client.yaml"
   pull_request:
     branches: [main]
-    paths:
-      - "apps/cli/**"
-      - ".github/workflows/check-pull-request-cli-client.yaml"
+
+permissions:
+  contents: read
 
 jobs:
   build:
     name: Build CLI Client
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - name: Checkout branch
         uses: actions/checkout@v4
 
@@ -38,6 +40,11 @@ jobs:
     name: Lint CLI Client
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - name: Checkout branch
         uses: actions/checkout@v4
 
@@ -57,6 +64,11 @@ jobs:
     name: Run tests in CLI Client
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - name: Checkout branch
         uses: actions/checkout@v4
 

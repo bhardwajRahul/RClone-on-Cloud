@@ -1,0 +1,43 @@
+##################################################################
+# A Github action used to deploy the Web API
+##################################################################
+
+name: Deploy Web API
+on:
+  workflow_run:
+    workflows: ["Publish Web API"]
+    types:
+      - completed
+
+jobs:
+  deploy-demo-env:
+    name: Deploy to Demo Environment
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Deploy web app to demo environment
+        run: |
+          curl -f -X POST "${{ secrets.DEPLOY_DEMO_ENV_HOOK_URL }}"
+
+  deploy-prod-env:
+    name: Deploy to Production Environment
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Deploy web app to production environment
+        run: |
+          curl -f -X POST "${{ secrets.DEPLOY_PROD_ENV_HOOK_URL }}"

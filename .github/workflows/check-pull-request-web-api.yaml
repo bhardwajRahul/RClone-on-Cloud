@@ -7,20 +7,22 @@ name: Check pull request on Web API
 on:
   push:
     branches: [main]
-    paths:
-      - "apps/web-api/**"
-      - ".github/workflows/check-pull-request-web-api.yaml"
   pull_request:
     branches: [main]
-    paths:
-      - "apps/web-api/**"
-      - ".github/workflows/check-pull-request-web-api.yaml"
+
+permissions:
+  contents: read
 
 jobs:
   build:
     name: Build Web API
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - name: Checkout branch
         uses: actions/checkout@v4
 
@@ -38,6 +40,11 @@ jobs:
     name: Lint Web API
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - name: Checkout branch
         uses: actions/checkout@v4
 
@@ -57,6 +64,11 @@ jobs:
     name: Run tests in Web API
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - name: Checkout branch
         uses: actions/checkout@v4
 
@@ -74,6 +86,11 @@ jobs:
     name: Build the Web API app via Docker
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - name: Checkout branch
         uses: actions/checkout@v4
 
