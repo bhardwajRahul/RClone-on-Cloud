@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,8 +72,8 @@ region = us-east-1`
 	err = os.WriteFile(configPath, []byte(dummyConfig), 0644)
 	require.NoError(t, err)
 
-	// 4. Run the migration
-	migrate.Migrate(configPath)
+	err = migrate.Migrate(io.Discard, configPath)
+	require.NoError(t, err)
 
 	// 5. Verify the data in MongoDB
 	var doc bson.M
